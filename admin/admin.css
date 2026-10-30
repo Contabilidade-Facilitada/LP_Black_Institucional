@@ -425,6 +425,8 @@ svg { flex: none; }
 }
 
 .grade { display: grid; gap: 16px; min-width: 0; }
+/* cartões empilhados numa mesma coluna da grade (funil + botões) */
+.pilha { display: grid; gap: 16px; align-content: start; min-width: 0; }
 @media (min-width: 1000px) {
   .grade--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grade--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -525,7 +527,9 @@ body.is-iniciando #ranking, body.is-iniciando #calor { min-height: 180px; }
 
 /* ---------- Controles ---------- */
 .segmentos { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.segmentos--rolagem { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 14px; padding-bottom: 2px; }
+/* display: flex, e não inline-flex: sem isso a fileira cresce até o tamanho
+   dos botões, não rola, e empurra a página para os lados no celular */
+.segmentos--rolagem { display: flex; max-width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 14px; padding-bottom: 2px; }
 .segmentos--rolagem::-webkit-scrollbar { display: none; }
 .segmentos button {
   padding: 5px 11px;
@@ -776,6 +780,20 @@ body.is-iniciando #ranking, body.is-iniciando #calor { min-height: 180px; }
 .tabela tr.is-novo td { animation: chegar-linha 2.4s ease-out; }
 @keyframes chegar-linha { from { background: rgba(255, 153, 51, 0.2); } to { background: transparent; } }
 .tabela .col-barra { width: 26%; min-width: 150px; }
+/* cadastros: 11 colunas; mais justas para caber inteiras a partir de ~1400px */
+#tabela-cadastros th, #tabela-cadastros td { padding-left: 11px; padding-right: 11px; }
+#tabela-cadastros th:first-child, #tabela-cadastros td:first-child { padding-left: 20px; }
+#tabela-cadastros th:last-child, #tabela-cadastros td:last-child { padding-right: 20px; }
+#tabela-cadastros td { max-width: 190px; }
+#tabela-cadastros td:nth-child(3) { max-width: 230px; }
+#tabela-cadastros td:nth-child(8) { max-width: 150px; }
+#tabela-cadastros td:nth-child(9) { max-width: 160px; }
+/* dispositivo e local não cabem nem na largura máxima do painel: saem da
+   tabela e seguem no detalhe (clique na linha) e no CSV */
+@media (min-width: 760px) {
+  #tabela-cadastros th:nth-child(10), #tabela-cadastros td:nth-child(10),
+  #tabela-cadastros th:nth-child(11), #tabela-cadastros td:nth-child(11) { display: none; }
+}
 .tabela td.vazio { text-align: center; padding: 32px; white-space: normal; }
 .tabela .descricao { display: block; color: var(--apagado); font-size: 11px; font-weight: 400; }
 .tabela mark { background: rgba(255, 153, 51, 0.28); color: var(--texto); border-radius: 3px; padding: 0 1px; }
@@ -1405,6 +1423,156 @@ body.entrar {
 .entrar__campo input:focus { outline: none; border-color: var(--laranja); box-shadow: 0 0 0 3px rgba(255, 153, 51, 0.18); }
 .entrar__lembrar { margin: 2px 0 4px; }
 .entrar__botao { justify-content: center; min-height: 46px; font-size: 15px; }
+
+/* ---------- Celular e tablet estreito ----------
+   Topo numa linha só, período e filtros em fileiras que rolam de lado,
+   filtro aberto como folha no alto da tela, tabelas viram cartões. */
+@media (max-width: 759px) {
+  /* topo: título e ações na primeira linha, situação da conexão na segunda */
+  .topo { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; padding: 12px var(--gutter); }
+  .topo__acoes { display: contents; }
+  .topo__marca { grid-row: 1; grid-column: 1; }
+  #copiar-link { grid-row: 1; grid-column: 2; }
+  .topo__acoes > a { grid-row: 1; grid-column: 3; }
+  .topo__usuario { display: none; }
+  .ao-vivo { grid-row: 2; grid-column: 1 / -1; justify-self: start; max-width: 100%; padding: 4px 10px; font-size: 11px; }
+  #ao-vivo-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* abas: um esmaecido na borda direita mostra que a fileira continua */
+  .abas { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  .abas__item { padding: 12px 10px 11px; font-size: 13px; }
+
+  /* período e filtros: uma fileira cada, rolando de lado de ponta a ponta */
+  .filtros { gap: 8px; padding: 10px 0; background: var(--fundo); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .filtros__linha { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 0 var(--gutter); }
+  .filtros__linha::-webkit-scrollbar { display: none; }
+  .filtros__linha > * { flex: none; }
+  .periodos { flex-wrap: nowrap; }
+  .periodos button { white-space: nowrap; padding: 6px 11px; }
+  .ativos { padding: 0 var(--gutter); }
+
+  /* filtro aberto: folha fixa no alto (fica fora da fileira que rola, que
+     cortaria o painel suspenso, e longe do teclado) */
+  .suspenso {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    z-index: 60;
+    box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.55), 0 18px 50px rgba(0, 0, 0, 0.6);
+  }
+  .suspenso__lista { max-height: 52vh; }
+  .suspenso__opcao { padding: 10px 8px; }
+
+  .conteudo { padding-top: 14px; }
+  .painel, .grade, .pilha { gap: 12px; }
+  .aviso-demo { font-size: 12px; padding: 10px 12px; }
+  .cartao { padding: 16px; }
+  .cartao--tabela { padding: 16px 0 0; }
+  .cartao--tabela > .cartao__topo,
+  .cartao--tabela > .segmentos,
+  .cartao--tabela > .barra-ferramentas { padding-left: 16px; padding-right: 16px; }
+  .segmentos button { padding: 5px 10px; }
+  .tabela-rolagem--alta { max-height: none; }
+
+  /* cadastros: cada linha vira um cartão (nome e hora; e-mail; WhatsApp e
+     botão; origem e campanha). O resto está no detalhe, ao tocar */
+  #tabela-cadastros thead { display: none; }
+  #tabela-cadastros, #tabela-cadastros tbody { display: block; }
+  #tabela-cadastros tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 3px 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--linha);
+  }
+  #tabela-cadastros td { padding: 0; border: 0; max-width: none; font-size: 12px; background: none; }
+  #tabela-cadastros tbody tr[tabindex]:hover,
+  #tabela-cadastros tr.is-selecionado { background: var(--superficie-2); }
+  #tabela-cadastros td:nth-child(2) { grid-area: 1 / 1; font-size: 14px; }
+  #tabela-cadastros td:nth-child(1) { grid-area: 1 / 2; justify-self: end; color: var(--apagado); font-size: 11px; }
+  #tabela-cadastros td:nth-child(3) { grid-area: 2 / 1 / 3 / 3; }
+  #tabela-cadastros td:nth-child(4) { grid-area: 3 / 1; }
+  #tabela-cadastros td:nth-child(9) { grid-area: 3 / 2; justify-self: end; max-width: 46vw; color: var(--apagado); }
+  #tabela-cadastros td:nth-child(5) { grid-area: 4 / 1; color: var(--apagado); }
+  #tabela-cadastros td:nth-child(6) { grid-area: 4 / 2; justify-self: end; max-width: 46vw; color: var(--apagado); }
+  #tabela-cadastros td:nth-child(7), #tabela-cadastros td:nth-child(8),
+  #tabela-cadastros td:nth-child(10), #tabela-cadastros td:nth-child(11) { display: none; }
+  #tabela-cadastros td.vazio { grid-area: auto / 1 / auto / 3; justify-self: stretch; font-size: 13px; }
+
+  /* ao vivo: evento e hora; detalhe; origem e local */
+  #tabela-feed thead { display: none; }
+  #tabela-feed, #tabela-feed tbody { display: block; }
+  #tabela-feed tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 16px; border-bottom: 1px solid var(--linha); }
+  #tabela-feed td { padding: 0; border: 0; max-width: none; font-size: 12px; }
+  #tabela-feed td:nth-child(2) { grid-area: 1 / 1; }
+  #tabela-feed td:nth-child(1) { grid-area: 1 / 2; justify-self: end; color: var(--apagado); }
+  #tabela-feed td:nth-child(3) { grid-area: 2 / 1 / 3 / 3; }
+  #tabela-feed td:nth-child(4) { grid-area: 3 / 1; color: var(--apagado); }
+  #tabela-feed td:nth-child(6) { grid-area: 3 / 2; justify-self: end; color: var(--apagado); }
+  #tabela-feed td:nth-child(5) { display: none; }
+  #tabela-feed td.vazio { grid-area: auto / 1 / auto / 3; justify-self: stretch; }
+
+  /* origens: sem a coluna de acessos e a barra, as que sobram cabem */
+  #tabela-origens th:nth-child(3), #tabela-origens td:nth-child(3),
+  #tabela-origens th:nth-child(6), #tabela-origens td:nth-child(6) { display: none; }
+  #tabela-origens th, #tabela-origens td { padding-left: 8px; padding-right: 8px; }
+  #tabela-origens th:first-child, #tabela-origens td:first-child { padding-left: 16px; max-width: 130px; }
+  #tabela-origens th:last-child, #tabela-origens td:last-child { padding-right: 16px; }
+  .tabela th:first-child, .tabela td:first-child { padding-left: 16px; }
+  .tabela th:last-child, .tabela td:last-child { padding-right: 16px; }
+
+  /* gravações: os filtros da lista rolam de lado */
+  .estudio__filtros { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .estudio__filtros::-webkit-scrollbar { display: none; }
+  .estudio__filtros button { flex: none; }
+}
+
+@media (max-width: 559px) {
+  /* indicadores em duas colunas; o destaque ocupa a linha inteira e, com
+     número ímpar, o último também */
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .kpi { padding: 12px 14px; }
+  .kpi__valor { font-size: 24px; }
+  .kpi--destaque { grid-column: 1 / -1; }
+  .kpi--destaque .kpi__valor { font-size: 40px; }
+  .kpis:not(.kpis--5) > .kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .kpi__nota { font-size: 10.5px; }
+  .kpi__ondas { right: 12px; bottom: 12px; }
+
+  /* ficha da gravação: avatar e nota lado a lado; nome e origem embaixo, na largura toda */
+  .estudio__ficha { padding: 12px; }
+  .ficha__topo { grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px 14px; padding: 16px; }
+  .ficha__avatar { grid-area: 1 / 1; }
+  .ficha__nota { grid-area: 1 / 3; justify-self: end; width: 76px; height: 76px; }
+  .ficha__nota svg { width: 76px; height: 76px; }
+  .ficha__nota-texto strong { font-size: 22px; }
+  .ficha__nota-texto span { font-size: 7px; }
+  .ficha__quem { grid-area: 2 / 1 / 3 / 4; }
+  .ficha__quem h2 { font-size: 22px; }
+  .ficha__avatar-dentro { width: 56px; height: 56px; font-size: 20px; }
+  .ficha__avatar-dentro .icone svg { width: 24px; height: 24px; }
+
+  /* barras: o complemento do valor desce para a linha de baixo */
+  .lista-barras__valor small { display: block; margin: 1px 0 0; text-align: right; }
+
+  /* mapa de calor: as 24 horas cabem na largura, sem rolagem */
+  .calor__grade { min-width: 0; grid-template-columns: 24px repeat(24, minmax(0, 1fr)); gap: 2px; }
+  .calor__celula { min-height: 0; border-radius: 2px; }
+  .calor__hora { font-size: 9px; white-space: nowrap; overflow: visible; }
+}
+
+@media (max-width: 389px) {
+  .topo__titulo { font-size: 18px; }
+  .topo__titulo span { display: none; }
+}
+
+/* gravações em coluna: sem ninguém escolhido, a ficha vazia não ocupa espaço */
+@media (max-width: 1099px) {
+  .estudio__ficha:has(#ficha[hidden]) { display: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

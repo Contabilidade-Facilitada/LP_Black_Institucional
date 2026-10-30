@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20261030-1">
-  <script src="admin.js?v=20261030-1" defer></script>
+  <link rel="stylesheet" href="admin.css?v=20261030-2">
+  <script src="admin.js?v=20261030-2" defer></script>
 </head>
 <body class="is-iniciando">
   <div class="brilho" aria-hidden="true"></div>
@@ -151,13 +151,22 @@
       </article>
 
       <div class="grade grade--2">
-        <article class="cartao">
-          <header class="cartao__topo">
-            <h2>Funil</h2>
-            <p>visitantes únicos em cada etapa</p>
-          </header>
-          <div id="funil"></div>
-        </article>
+        <div class="pilha">
+          <article class="cartao">
+            <header class="cartao__topo">
+              <h2>Funil</h2>
+              <p>visitantes únicos em cada etapa</p>
+            </header>
+            <div id="funil"></div>
+          </article>
+          <article class="cartao">
+            <header class="cartao__topo">
+              <h2>Botões que mais trazem cadastros</h2>
+              <p>os 5 primeiros; todos estão em Eventos do GTM</p>
+            </header>
+            <div id="botoes-geral"></div>
+          </article>
+        </div>
         <article class="cartao">
           <header class="cartao__topo">
             <h2>Últimos cadastros</h2>
@@ -222,7 +231,7 @@
           <label class="busca">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
             <span class="visualmente-oculto">Buscar cadastros</span>
-            <input type="search" id="busca" placeholder="Buscar por nome, e-mail ou WhatsApp  ( / )" autocomplete="off">
+            <input type="search" id="busca" placeholder="Buscar por nome, e-mail ou WhatsApp" title="Atalho: tecla /" aria-keyshortcuts="/" autocomplete="off">
           </label>
           <label class="seletor-pequeno">
             <span>Linhas</span>

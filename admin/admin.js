@@ -105,6 +105,8 @@
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
   const fmtHora = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  // tabela de cadastros: dia e hora, sem ano nem segundos (a data completa fica no title)
+  const fmtDataCurta = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   const fmtDiaSemana = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, weekday: "short", day: "2-digit", month: "2-digit" });
   const plural = (n, um, varios) => `${fmtNum(n)} ${n === 1 ? um : varios}`;
 
@@ -797,6 +799,7 @@
 
     renderEvolucao(f, anterior, grade, animar);
     renderFunil(f, animar);
+    renderBotoesGeral(f, animar);
     renderUltimos(f);
     renderRanking(f, animar);
     renderCalor(f, animar);
@@ -836,6 +839,35 @@
     });
     $("#legenda-evolucao").replaceChildren(...(series.length > 1 ? series.map((s) => el("span", { class: "legenda__item" },
       el("span", { class: "legenda__linha", style: { background: s.cor } }), s.nome)) : []));
+  }
+
+  // aberturas do formulário e cadastros por botão (cta), no período e filtros
+  function contarBotoes(f) {
+    const porBotao = new Map();
+    const botao = (cta) => {
+      const chave = cta || "";
+      let b = porBotao.get(chave);
+      if (!b) porBotao.set(chave, (b = { cta: chave, aberturas: 0, cadastros: 0 }));
+      return b;
+    };
+    for (const e of f.eventos) if (e.evento === "lead_form_aberto") botao(e.detalhe).aberturas++;
+    for (const c of f.cadastros) botao(c.cta).cadastros++;
+    return [...porBotao.values()];
+  }
+
+  function renderBotoesGeral(f, animar) {
+    const lista = contarBotoes(f).filter((b) => b.cadastros).sort((a, b) => b.cadastros - a.cadastros || b.aberturas - a.aberturas).slice(0, 5);
+    if (!lista.length) {
+      $("#botoes-geral").replaceChildren(el("p", { class: "vazio" }, "Nenhum cadastro no período."));
+      return;
+    }
+    listaBarras($("#botoes-geral"), lista.map((b) => ({
+      nome: CTAS[b.cta] || b.cta || "(sem identificação)",
+      valor: b.cadastros,
+      rotulo: plural(b.cadastros, "cadastro", "cadastros"),
+      nota: `${plural(b.aberturas, "abertura", "aberturas")} · ${fmtPct(b.aberturas ? b.cadastros / b.aberturas : NaN)}`,
+      cor: CORES.cadastros,
+    })), { animar });
   }
 
   function renderFunil(f, animar) {
@@ -1001,7 +1033,7 @@
         tabindex: 0, dataset: { id: c.id }, class: novosIds.has(c.id) ? "is-novo" : null,
         style: { "--atraso": `${Math.min(i * 14, 350)}ms` },
       },
-      el("td", {}, fmtDataHora.format(c.ts)),
+      el("td", { title: fmtDataHora.format(c.ts) }, fmtDataCurta.format(c.ts).replace(",", "")),
       el("td", { class: "forte", title: c.nome || "" }, destacarTermo(c.nome || "—", termo),
         (dados.emails.get(c.email) || 0) > 1 ? el("span", { class: "etiqueta etiqueta--repetido", title: "Este e-mail tem mais de um cadastro" }, "repetido") : null),
       el("td", { title: c.email || "" }, destacarTermo(c.email || "—", termo)),
@@ -1010,7 +1042,7 @@
       el("td", { title: c.utm_campaign || "" }, c.utm_campaign || "—"),
       el("td", { title: c.utm_content || "" }, c.utm_content || "—"),
       el("td", { title: c.utm_term || "" }, c.utm_term || "—"),
-      el("td", {}, CTAS[c.cta] || c.cta || "—"),
+      el("td", { title: CTAS[c.cta] || c.cta || "" }, CTAS[c.cta] || c.cta || "—"),
       el("td", {}, capitalizar(c.dispositivo) || "—"),
       el("td", {}, local(c) || "—"))));
     }
@@ -1285,16 +1317,7 @@
     });
 
     // botões (cta) que abriram o formulário
-    const porBotao = new Map();
-    const botao = (cta) => {
-      const chave = cta || "";
-      let b = porBotao.get(chave);
-      if (!b) porBotao.set(chave, (b = { cta: chave, aberturas: 0, cadastros: 0 }));
-      return b;
-    };
-    for (const e of aberturas) botao(e.detalhe).aberturas++;
-    for (const c of f.cadastros) botao(c.cta).cadastros++;
-    listaBarras($("#botoes"), [...porBotao.values()].sort((a, b) => b.aberturas - a.aberturas).map((b) => ({
+    listaBarras($("#botoes"), contarBotoes(f).sort((a, b) => b.aberturas - a.aberturas).map((b) => ({
       nome: CTAS[b.cta] || b.cta || "(sem identificação)",
       valor: b.aberturas,
       rotulo: plural(b.aberturas, "abertura", "aberturas"),
@@ -2361,9 +2384,14 @@
   });
 
   // lista: escolher, rolar sem fim e navegar pelo teclado
+  // abaixo de 1100px a ficha fica embaixo da lista (ver admin.css): o toque
+  // leva até ela
+  const estudioEmColuna = window.matchMedia("(max-width: 1099px)");
   $("#est-itens").addEventListener("click", (e) => {
     const li = e.target.closest(".est-item");
-    if (li) abrirFicha(li.dataset.sessao);
+    if (!li) return;
+    abrirFicha(li.dataset.sessao);
+    if (estudioEmColuna.matches) $("#est-ficha").scrollIntoView({ block: "start", behavior: movimentoReduzido ? "auto" : "smooth" });
   });
   // rolagem sem fim: perto do fim da lista, entram mais 60
   $("#est-itens").addEventListener("scroll", (e) => {
@@ -2534,6 +2562,15 @@
 
   function atualizarControles() {
     $$("#periodos button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.periodo === prefs.periodo)));
+    // no celular a fileira rola de lado (ver admin.css): o período escolhido
+    // fica à vista, centralizado, sem mexer na rolagem da página
+    const ativo = $("#periodos [aria-pressed='true']");
+    const fileira = $("#periodos").parentElement;
+    if (ativo && fileira.scrollWidth > fileira.clientWidth) {
+      const a = ativo.getBoundingClientRect();
+      const r = fileira.getBoundingClientRect();
+      if (a.left < r.left || a.right > r.right) fileira.scrollLeft += a.left - r.left - (r.width - a.width) / 2;
+    }
     $("#datas").hidden = prefs.periodo !== "personalizado";
     $("#f-de").value = prefs.de;
     $("#f-ate").value = prefs.ate;
@@ -2643,6 +2680,12 @@
       ["email", "sfmc", "black_aquecimento", "email_1"], ["", "", "", ""], ["", "", "", ""],
     ];
     const LOCAIS = [["SP", "São Paulo"], ["RJ", "Rio de Janeiro"], ["MG", "Belo Horizonte"], ["PR", "Curitiba"], ["BA", "Salvador"], ["SP", "Campinas"], ["PE", "Recife"]];
+    // [seletor, rótulo, k]: k = 0 é clique em algo que não é clicável
+    const AREAS = [
+      ["[data-ir-para=\"pos\"]", "2 pós pelo preço de 1", 1], ["[data-ir-para=\"escola\"]", "Escola Contábil vitalícia", 1],
+      ["#topo", "Black November", 0], ["#escola", "O maior preparatório para o Exame CFC", 0],
+      ["#pos-cursos", "Pós-graduações", 0], ["#depoimentos", "O que dizem nossos alunos", 0], ["#gabriel", "Gabriel Rabelo", 0],
+    ];
     const NOMES = ["Ana Souza", "Bruno Lima", "Carla Dias", "Diego Alves", "Elisa Rocha", "Fábio Nunes", "Gabriela Reis", "Hugo Martins", "Isabela Costa", "João Pedro", "Larissa Melo", "Marcos Viana"];
 
     // listas de objetos -> o mesmo formato de colunas e linhas da API
@@ -2673,6 +2716,18 @@
       const agora = relogio();
       const ate = (t) => Math.min(t, agora);
       eventos.push({ ts, evento: "page_view", ...base, pagina: "/", ...contexto });
+      // cliques presos a elementos que existem na LP (o mapa os encontra pelo seletor)
+      const largura = dispositivo === "computador" ? 1440 : 390;
+      const clicar = (t, seletor, rotulo, k = 1, perto = false) => {
+        const ponto = () => +(perto ? 0.3 + Math.random() * 0.4 : Math.random()).toFixed(3);
+        eventos.push({ ts: ate(t), evento: "clique", ...base, valor: largura,
+          detalhe: JSON.stringify({ c: seletor, x: ponto(), y: ponto(), px: 0, py: 0, f: 0, k, l: rotulo }) });
+      };
+      if (Math.random() < 0.4) clicar(ts + 6000, ...sorteio(AREAS));
+      if (Math.random() < 0.03) for (let i = 0; i < 3; i++) clicar(ts + 9000 + i * 300, "#gabriel", "Gabriel Rabelo", 0, true);
+      // gravação: 20% das visitas por sorteio e toda visita que abre o formulário (ver main.js)
+      let gravada = Math.random() < 0.2;
+      if (gravada) eventos.push({ ts, evento: "gravacao", ...base });
       const segundos = aoVivo ? 3 : Math.round(5 + Math.random() * 240);
       eventos.push({ ts: ate(ts + segundos * 1000), evento: "engajamento", ...base, detalhe: String(Math.min(100, Math.round(Math.random() * 110))), valor: segundos });
       if (Math.random() < 0.3) eventos.push({ ts: ate(ts + 4000), evento: "gtm.scrollDepth", ...base, detalhe: sorteio(["25", "50", "75", "90"]) });
@@ -2680,7 +2735,9 @@
       const chanceAbrir = 0.18 + (utm_source === "email" ? 0.1 : 0) + (aoVivo ? 0.1 : 0);
       if (Math.random() >= chanceAbrir) return;
       const cta = sorteio(["heroi", "heroi", "dock", "dock", "para-quem", "escola", "pos", "pos-reforma-tributaria", "pos-pericia", "final"]);
+      clicar(ts + 19500, `[data-abrir-lead="${cta}"]`, CTAS[cta], 1, true);
       eventos.push({ ts: ate(ts + 20000), evento: "lead_form_aberto", ...base, detalhe: cta });
+      if (!gravada) { gravada = true; eventos.push({ ts, evento: "gravacao", ...base }); }
       if (Math.random() >= 0.45) return;
       const nome = sorteio(NOMES);
       const tsCadastro = ate(ts + 50000);
