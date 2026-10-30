@@ -975,7 +975,7 @@ footer, .cruzamento { position: relative; z-index: 2; }
   .heroi__vitrine,
   .heroi__anel { display: block; }
 
-  /* foto em pé (braços cruzados): ocupa a altura do pôster e some na base */
+  /* foto do especialista: presa à base do pôster e sumindo nela */
   .heroi__especialista img {
     top: auto;
     bottom: 0;

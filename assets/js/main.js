@@ -22,10 +22,10 @@
       lead_origin: "lp_black_pf_2026",
       lead_product_interest: "institucional",
     },
-    // vazio: a confirmação aparece na própria gaveta. Com um endereço (o
-    // Typeform da Black, por exemplo), o visitante vai para lá depois do
+    // mesmo Typeform da Esquenta Black: o visitante vai para lá depois do
     // cadastro, com as UTMs, a identidade e os dados como campos ocultos
-    destinoPosCadastro: "",
+    // (depois do "#"). Vazio, a confirmação aparece na própria gaveta
+    destinoPosCadastro: "https://3rng23rvpr3.typeform.com/black-2026",
     formId: "black_pf_2026",
     formNome: "Lista VIP - Black PF 2026",
     // mesmo evento de conversão da Esquenta Black, para os gatilhos do GTM
