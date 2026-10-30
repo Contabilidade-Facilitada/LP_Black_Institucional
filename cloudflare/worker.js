@@ -87,7 +87,10 @@ export default {
         .on("noscript", { element: (el) => el.remove() })
         .on("head", {
           element: (el) => el.append(
-            "<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>",
+            // a LP encaixa a rolagem nas seções (scroll-snap) e rola suave:
+            // o painel precisa levar a página ao pixel exato da gravação
+            "<style>*,*::before,*::after{animation:none!important;transition:none!important}" +
+            "html{scroll-snap-type:none!important;scroll-behavior:auto!important}</style>",
             { html: true },
           ),
         })
@@ -476,7 +479,7 @@ function telaLogin(erro = "", status = 200, email = "") {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css?v=20261030-2">
+<link rel="stylesheet" href="admin.css?v=20261030-3">
 </head>
 <body class="entrar">
 <div class="brilho" aria-hidden="true"></div>

@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20261030-2">
-  <script src="admin.js?v=20261030-2" defer></script>
+  <link rel="stylesheet" href="admin.css?v=20261030-3">
+  <script src="admin.js?v=20261030-3" defer></script>
 </head>
 <body class="is-iniciando">
   <div class="brilho" aria-hidden="true"></div>
@@ -344,16 +344,18 @@
               </div>
             </header>
 
-            <div class="ficha__metricas" id="f-metricas"></div>
-
             <div class="ficha__corpo">
               <div class="ficha__palco">
-                <div class="ficha__aparelho" id="f-aparelho">
-                  <div class="reproducao__visor" id="rep-visor"></div>
+                <!-- cena em perspectiva: o aparelho inclina com o mouse (ver admin.js) -->
+                <div class="ficha__cena">
+                  <div class="ficha__aparelho" id="f-aparelho">
+                    <div class="reproducao__visor" id="rep-visor"></div>
+                  </div>
+                  <span class="ficha__chao" aria-hidden="true"></span>
                 </div>
                 <p class="reproducao__aviso" id="rep-aviso" hidden></p>
                 <div class="reproducao__controles" id="rep-controles">
-                  <button class="botao reproducao__tocar" type="button" id="rep-tocar" aria-label="Reproduzir">▶</button>
+                  <button class="botao reproducao__tocar" type="button" id="rep-tocar" aria-label="Reproduzir"><span class="icone" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg></span></button>
                   <span class="reproducao__tempo" id="rep-tempo">0:00 / 0:00</span>
                   <div class="reproducao__linha">
                     <div class="reproducao__marcas" id="rep-marcas"></div>
@@ -373,13 +375,18 @@
                 </div>
               </div>
 
-              <aside class="ficha__tempo">
-                <h3>Linha do tempo</h3>
-                <ol class="linha-tempo" id="rep-jornada"></ol>
-                <section class="ficha__outras" id="rep-outras">
-                  <h3>Outras visitas desta pessoa</h3>
-                  <ul class="outras-visitas" id="rep-visitas"></ul>
-                </section>
+              <!-- coluna ao lado do palco: as quatro medidas e, embaixo, a linha
+                   do tempo, que rola por dentro na altura do palco (ver admin.js) -->
+              <aside class="ficha__lado">
+                <div class="ficha__metricas" id="f-metricas"></div>
+                <div class="ficha__tempo">
+                  <h3>Linha do tempo</h3>
+                  <ol class="linha-tempo" id="rep-jornada"></ol>
+                  <section class="ficha__outras" id="rep-outras">
+                    <h3>Outras visitas desta pessoa</h3>
+                    <ul class="outras-visitas" id="rep-visitas"></ul>
+                  </section>
+                </div>
               </aside>
             </div>
           </article>

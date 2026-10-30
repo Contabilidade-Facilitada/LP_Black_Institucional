@@ -1509,6 +1509,14 @@
     new ResizeObserver(refazer).observe(doc.body);
   }
 
+  // A LP encaixa a rolagem nas seções (scroll-snap) e rola suave; o mapa e a
+  // reprodução precisam da página solta, no pixel exato. O Worker já tira isso
+  // da página do mapa (?mapa=1); aqui é a segunda garantia.
+  function soltarRolagem(doc) {
+    doc.documentElement.style.setProperty("scroll-snap-type", "none", "important");
+    doc.documentElement.style.setProperty("scroll-behavior", "auto", "important");
+  }
+
   function desenharQuadro(q, lista, rolagens, modo) {
     let doc = null;
     try { doc = q.iframe.contentDocument; } catch { /* outra origem */ }
@@ -1519,6 +1527,7 @@
       q.aviso.hidden = false;
       return;
     }
+    soltarRolagem(doc);
     q.aviso.hidden = true;
     const janela = q.iframe.contentWindow;
     const W = doc.documentElement.scrollWidth;
@@ -1755,7 +1764,31 @@
     entrada: '<svg viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5M15 12H3"/></svg>',
     rolagem: '<svg viewBox="0 0 24 24"><path d="M12 3v18M6 15l6 6 6-6"/></svg>',
     seta: '<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
+    recarregar: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
+    pausa: '<svg viewBox="0 0 24 24"><rect x="6.5" y="5" width="4" height="14" rx="1.2"/><rect x="13.5" y="5" width="4" height="14" rx="1.2"/></svg>',
+    relogio: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   };
+  // canal de chegada da visita, numa etiqueta com a cor da plataforma
+  const CANAIS = [
+    [/facebook|instagram|^fb$|^ig$|meta/i, "Meta", "#5b8def"],
+    [/google|youtube|gads/i, "Google", "#3fbf6f"],
+    [/e-?mail|sfmc|newsletter/i, "E-mail", "#f0c060"],
+    [/whats/i, "WhatsApp", "#2fd36f"],
+    [/tiktok/i, "TikTok", "#ff4f8b"],
+    [/linkedin/i, "LinkedIn", "#3a9bd8"],
+  ];
+  function canalDe(pv) {
+    const fonte = [pv.utm_source, pv.clique].filter(Boolean).join(" ");
+    for (const [teste, nome, cor] of CANAIS) if (teste.test(fonte)) return { nome, cor };
+    if (pv.utm_source) return { nome: capitalizar(pv.utm_source), cor: "#a99a8a" };
+    if (pv.referencia) return { nome: pv.referencia.replace(/^(www|l|m|lm)\./, "").split(".")[0], cor: "#a99a8a" };
+    return { nome: "Direto", cor: "#6f655b" };
+  }
+  function etiquetaCanal(pv) {
+    const c = canalDe(pv);
+    return el("span", { class: "canal", style: { "--canal": c.cor }, title: origemMidia(pv) }, c.nome);
+  }
+
   function icone(nome, classe = "icone") {
     const n = document.createElement("span");
     n.className = classe;
@@ -1940,7 +1973,8 @@
         el("strong", {}, nomeDaVisita(v)),
         el("time", { dataset: { ts: v.pv.ts }, title: fmtDataHora.format(v.pv.ts) }, fmtRelativo(v.pv.ts))),
       el("span", { class: "est-item__detalhe" },
-        [v.pv.utm_term || origemMidia(v.pv), local(v.pv), o && o.total > 1 ? `${o.n}ª visita` : null].filter(Boolean).join(" · ")),
+        etiquetaCanal(v.pv),
+        [v.pv.utm_term || v.pv.utm_campaign, local(v.pv), o && o.total > 1 ? `${o.n}ª visita` : null].filter(Boolean).join(" · ")),
       faixa),
     el("span", { class: "est-item__lado" },
       el("span", { class: "est-item__duracao" }, fmtTempo(v.tempo * 1000)),
@@ -1960,14 +1994,30 @@
   const RAIO_ANEL = 50;
   const CIRCUNFERENCIA = 2 * Math.PI * RAIO_ANEL;
 
+  // Uma visita é a aba do navegador. Cada recarga da página nessa aba é um
+  // carregamento novo, que recomeça o relógio e a numeração das partes
+  // (ver main.js); o início de cada carregamento põe tudo na mesma régua.
   function lerGravacao(partes) {
     if (!partes.length) return null;
-    const g = { inicio: partes[0].inicio, largura: partes[0].largura, altura: partes[0].altura, alturaDoc: 0, rolagem: [], mouse: [], marcas: [] };
-    for (const p of partes) {
+    const base = Math.min(...partes.map((p) => (Number.isFinite(p.inicio) ? p.inicio : Infinity)));
+    const desvioDe = (p) => (Number.isFinite(base) && Number.isFinite(p.inicio) ? p.inicio - base : 0);
+    const ordenadas = partes.slice().sort((a, b) => desvioDe(a) - desvioDe(b) || a.seq - b.seq);
+    const g = {
+      inicio: Number.isFinite(base) ? base : partes[0].inicio,
+      largura: ordenadas[0].largura, altura: ordenadas[0].altura, alturaDoc: 0,
+      rolagem: [], mouse: [], marcas: [], cargas: [],
+    };
+    for (const p of ordenadas) {
+      const desvio = desvioDe(p);
+      if (!g.cargas.includes(desvio)) {
+        g.cargas.push(desvio);
+        // a página recarregada começa com o formulário fechado
+        if (desvio) g.marcas.push([desvio, "f"]);
+      }
       g.alturaDoc = Math.max(g.alturaDoc, p.altura_doc || 0);
       for (const item of String(p.dados || "").split(";")) {
         const [t, tipo, a, b, c] = item.split(",");
-        const tn = Number(t);
+        const tn = Number(t) + desvio;
         if (!Number.isFinite(tn)) continue;
         if (tipo === "s") g.rolagem.push([tn, Number(a)]);
         else if (tipo === "m") g.mouse.push([tn, Number(a), Number(b)]);
@@ -2012,7 +2062,7 @@
   function pararReproducao() {
     rep.tocando = false;
     cancelAnimationFrame(rep.quadro);
-    $("#rep-tocar").textContent = "▶";
+    $("#rep-tocar").replaceChildren(icone("play"));
     $("#rep-tocar").setAttribute("aria-label", "Reproduzir");
     $("#f-aparelho").classList.remove("is-tocando");
   }
@@ -2053,6 +2103,7 @@
     texto("#f-rotulo", [p?.nome ? "Pessoa cadastrada" : "Visitante anônimo", o && o.total > 1 ? `${o.n}ª de ${o.total} visitas` : "primeira visita"].join(" · "));
     texto("#rep-titulo", nomeDaVisita(v));
     texto("#rep-sub", [fmtDataHora.format(pv.ts), local(pv), [capitalizar(pv.dispositivo), pv.sistema, pv.navegador].filter(Boolean).join(" "), p?.email].filter(Boolean).join(" · "));
+    $("#rep-sub").title = $("#rep-sub").textContent;
 
     // de onde veio: origem → campanha → conjunto → anúncio
     const etapas = [
@@ -2077,16 +2128,17 @@
     contar("#f-pontos", v.nota);
 
     // medidores
-    const medidor = (rotulo, valor, fracao, nota, classe = "") => el("div", { class: `medidor ${classe}` },
+    const medidor = (simbolo, rotulo, valor, fracao, nota, classe = "") => el("div", { class: `medidor ${classe}` },
+      el("span", { class: "medidor__icone" }, icone(simbolo)),
       el("span", { class: "medidor__rotulo" }, rotulo),
       el("strong", { class: "medidor__valor" }, valor),
       el("span", { class: "medidor__trilho" }, el("span", { class: "medidor__barra", style: { "--fracao": String(Math.max(0.02, Math.min(1, fracao))) } })),
       el("span", { class: "medidor__nota" }, nota));
     $("#f-metricas").replaceChildren(
-      medidor("Tempo na página", fmtDuracao(v.tempo), v.tempo / 180, v.tempo >= 60 ? "leu com calma" : v.tempo >= 15 ? "passou os olhos" : "saiu logo"),
-      medidor("Rolagem", `${v.rolagem}%`, v.rolagem / 100, v.rolagem >= 75 ? "viu quase tudo" : v.rolagem >= 40 ? "viu metade" : "ficou no topo"),
-      medidor("Cliques", fmtNum(v.cliques.length), v.cliques.length / 10, v.cadastro ? "e se cadastrou" : v.abriu ? "abriu o formulário" : "não abriu o formulário"),
-      medidor("Frustração", v.raiva || v.semEfeito ? `${v.raiva + v.semEfeito}` : "nenhuma", (v.raiva * 3 + v.semEfeito) / 8,
+      medidor("relogio", "Tempo", fmtDuracao(v.tempo), v.tempo / 180, v.tempo >= 60 ? "leu com calma" : v.tempo >= 15 ? "passou os olhos" : "saiu logo"),
+      medidor("rolagem", "Rolagem", `${v.rolagem}%`, v.rolagem / 100, v.rolagem >= 75 ? "viu quase tudo" : v.rolagem >= 40 ? "viu metade" : "ficou no topo"),
+      medidor("clique", "Cliques", fmtNum(v.cliques.length), v.cliques.length / 10, v.cadastro ? "e se cadastrou" : v.abriu ? "abriu o formulário" : "não abriu o formulário"),
+      medidor("raio", "Frustração", v.raiva || v.semEfeito ? `${v.raiva + v.semEfeito}` : "nenhuma", (v.raiva * 3 + v.semEfeito) / 8,
         v.raiva ? `${plural(v.raiva, "clique", "cliques")} de raiva` : v.semEfeito ? `${plural(v.semEfeito, "clique", "cliques")} sem efeito` : "navegou sem tropeços",
         v.raiva || v.semEfeito ? "medidor--alerta" : "medidor--tranquilo"),
     );
@@ -2122,6 +2174,7 @@
     formulario: { icone: "formulario", cor: CORES.verde },
     cadastro: { icone: "estrela", cor: CORES.cadastros },
     rolagem: { icone: "rolagem", cor: CORES.anterior },
+    recarga: { icone: "recarregar", cor: "#8fb8ff" },
   };
 
   function prepararReproducao({ pv, eventos, cadastro, partes, tocar }) {
@@ -2144,10 +2197,17 @@
         const sem = cliqueSemEfeito(c);
         itens.push({ t, rotulo: sem ? "Clicou sem efeito" : "Clicou", sub: c?.l || "(sem texto)", tipo: sem ? "sem-efeito" : "clique" });
       } else if (e.evento === "lead_form_aberto") itens.push({ t, rotulo: "Abriu o formulário", sub: CTAS[e.detalhe] || e.detalhe || "", tipo: "formulario" });
-      else if (e.evento === "lead_esquenta_black") itens.push({ t, rotulo: "Enviou o cadastro", sub: "", tipo: "cadastro" });
+      else if (e.evento === "lead_esquenta_black") itens.push({ t, rotulo: "Enviou o cadastro", sub: CTAS[e.detalhe] || "", tipo: "cadastro" });
       else if (e.evento === "gtm.scrollDepth") itens.push({ t, rotulo: `Rolou ${e.detalhe}% da página`, sub: "", tipo: "rolagem" });
+      else if (e.evento === "page_view" && e.id !== pv.id) itens.push({ t, rotulo: "Recarregou a página", sub: "mesma aba, carregamento novo", tipo: "recarga" });
     }
-    if (cadastro) itens.push({ t: cadastro.ts - inicio, rotulo: "Cadastrou", sub: cadastro.nome || cadastro.email, tipo: "cadastro" });
+    // o envio (dataLayer) e a cópia gravada no banco são o mesmo cadastro: um item só
+    if (cadastro) {
+      const tc = cadastro.ts - inicio;
+      const envio = itens.filter((x) => x.tipo === "cadastro").sort((a, b) => Math.abs(a.t - tc) - Math.abs(b.t - tc))[0];
+      if (envio && Math.abs(envio.t - tc) < 15000) Object.assign(envio, { rotulo: "Cadastrou", sub: cadastro.nome || cadastro.email });
+      else itens.push({ t: tc, rotulo: "Cadastrou", sub: cadastro.nome || cadastro.email, tipo: "cadastro" });
+    }
     itens.sort((a, b) => a.t - b.t);
     rep.itens = itens;
     rep.atual = -1;
@@ -2207,9 +2267,24 @@
     visor.replaceChildren(iframe);
     const palco = $(".ficha__palco");
     const disponivel = Math.max(200, palco.clientWidth - (computador ? 28 : 24));
-    const escala = Math.min(1, disponivel / largura, (computador ? window.innerHeight * 0.5 : window.innerHeight * 0.62) / altura);
+    // lado a lado com a lista, a ficha tem altura fixa: o aparelho usa o que
+    // sobra abaixo do cabeçalho, medidos os controles (que podem quebrar em
+    // duas linhas), o aviso, a moldura, a luz do chão e os espaços; em coluna,
+    // a página rola e vale uma fração da tela
+    const emColuna = window.matchMedia("(max-width: 1099px)").matches;
+    const aviso = $("#rep-aviso");
+    const reservado = 40 + 16 + 12 + 26 + (computador ? 34 : 28) + 16
+      + $("#rep-controles").offsetHeight + (aviso.hidden ? 0 : aviso.offsetHeight + 12);
+    const livre = emColuna
+      ? window.innerHeight * (computador ? 0.5 : 0.62)
+      : Math.max(240, $("#est-ficha").clientHeight - $(".ficha__topo").offsetHeight - reservado);
+    const escala = Math.min(1, disponivel / largura, livre / altura);
     visor.style.width = `${Math.floor(largura * escala)}px`;
     visor.style.height = `${Math.floor(altura * escala)}px`;
+    // a coluna ao lado (medidas + linha do tempo) vai até a altura do palco já
+    // desenhado; a linha do tempo rola por dentro
+    $(".ficha__tempo").style.maxHeight = emColuna ? ""
+      : `${Math.max(160, palco.offsetHeight - $("#f-metricas").offsetHeight - 16)}px`;
     iframe.style.transform = `scale(${escala})`;
     Object.assign(rep, { iframe, largura, altura, escala, doc: null });
 
@@ -2221,6 +2296,7 @@
         $("#rep-aviso").textContent = "Aberto do disco, o navegador não deixa o painel ler a página. A reprodução funciona no painel publicado.";
         return;
       }
+      soltarRolagem(doc);
       rep.doc = doc;
       const camada = (estilo) => {
         const n = doc.createElement("div");
@@ -2249,6 +2325,8 @@
     const t = rep.t;
     texto("#rep-tempo", `${fmtTempo(t)} / ${fmtTempo(rep.duracao)}${rep.foraDaAba?.some(([a, b]) => t >= a && t < b) ? " · fora da aba" : ""}`);
     $("#rep-barra").value = String(Math.round(t));
+    // parte já tocada da barra, pintada pelo CSS (ver .reproducao__linha input)
+    $("#rep-barra").style.setProperty("--p", String(rep.duracao ? Math.min(1, t / rep.duracao) : 0));
 
     // linha do tempo acompanha a reprodução
     let atual = -1;
@@ -2284,7 +2362,8 @@
       const p = ultimo && posicaoDoClique(doc, janela, ultimo.c, W);
       if (p) y = p[1] - rep.altura / 2;
     }
-    janela.scrollTo(0, Math.max(0, y));
+    // "instant": a LP tem scroll-behavior: smooth, que faria a página escorregar até o ponto
+    janela.scrollTo({ top: Math.max(0, y), behavior: "instant" });
 
     // formulário aberto ou fechado
     let aberto = false;
@@ -2363,7 +2442,7 @@
     if (rep.t >= rep.duracao) rep.t = 0;
     rep.tocando = true;
     rep.ultimo = performance.now();
-    $("#rep-tocar").textContent = "❚❚";
+    $("#rep-tocar").replaceChildren(icone("pausa"));
     $("#rep-tocar").setAttribute("aria-label", "Pausar");
     $("#f-aparelho").classList.add("is-tocando");
     rep.quadro = requestAnimationFrame(passoReproducao);
@@ -2376,6 +2455,30 @@
 
   $("#rep-tocar").addEventListener("click", alternarReproducao);
   $("#rep-barra").addEventListener("input", (e) => { rep.t = Number(e.target.value); desenharReproducao(); });
+
+  // Aparelho em perspectiva: inclina na direção do mouse e endireita quando
+  // a reprodução toca (ver .ficha__aparelho no CSS). Só com mouse; sem
+  // movimento reduzido.
+  (() => {
+    const palco = $(".ficha__palco");
+    if (movimentoReduzido || !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    let quadro = 0;
+    palco.addEventListener("pointermove", (e) => {
+      cancelAnimationFrame(quadro);
+      quadro = requestAnimationFrame(() => {
+        const r = palco.getBoundingClientRect();
+        const x = (e.clientX - r.left) / r.width - 0.5;
+        const y = (e.clientY - r.top) / r.height - 0.5;
+        palco.style.setProperty("--giro-y", `${(x * 10).toFixed(2)}deg`);
+        palco.style.setProperty("--giro-x", `${(-y * 7).toFixed(2)}deg`);
+        palco.style.setProperty("--brilho-x", `${((x + 0.5) * 100).toFixed(1)}%`);
+      });
+    });
+    palco.addEventListener("pointerleave", () => {
+      cancelAnimationFrame(quadro);
+      ["--giro-y", "--giro-x", "--brilho-x"].forEach((v) => palco.style.removeProperty(v));
+    });
+  })();
   $("#rep-velocidades").addEventListener("click", (e) => {
     const b = e.target.closest("[data-velocidade]");
     if (!b) return;
