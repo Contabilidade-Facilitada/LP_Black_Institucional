@@ -12,10 +12,10 @@
   "main": "cloudflare/worker.js",
   "compatibility_date": "2026-10-01",
   // domínio próprio: o deploy cria o registro DNS e o certificado na zona
-  // contabilidadefacilitada.com.br. A regra de redirecionamento da zona
-  // ("Institucional CF") precisa deixar este endereço de fora.
+  // contabilidadefacilitada.com. Na zona .com.br não dá: a regra
+  // "Institucional CF" redireciona todo endereço de lá para o .com.
   "routes": [
-    { "pattern": "blacknovember.contabilidadefacilitada.com.br", "custom_domain": true }
+    { "pattern": "blacknovember.contabilidadefacilitada.com", "custom_domain": true }
   ],
   // com "routes" declarado, o wrangler desliga o *.workers.dev se estas duas
   // linhas faltarem; ficam ligados, como antes do domínio próprio
