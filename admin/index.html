@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#050403">
+  <title>Painel Black November</title>
+  <!-- Painel da LP: acessos, cadastros, UTMs e eventos do dataLayer, em tempo
+       real. Protegido pelo login do Worker (cloudflare/worker.js, tela /admin/entrar).
+       Caminhos relativos, para a página abrir também direto do disco (modo
+       demonstração, ver admin.js). Em /admin sem a barra final eles
+       apontariam para fora da pasta; o Worker redireciona esse endereço. -->
+  <link rel="icon" type="image/png" href="../assets/img/simbolo-cf.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="admin.css?v=20261030-1">
+  <script src="admin.js?v=20261030-1" defer></script>
+</head>
+<body class="is-iniciando">
+  <div class="brilho" aria-hidden="true"></div>
+
+  <header class="topo">
+    <div class="topo__marca">
+      <img src="../assets/img/logo-cf-branco.webp" alt="Contabilidade Facilitada" width="132" height="32">
+      <span class="topo__separador" aria-hidden="true"></span>
+      <span class="topo__titulo">Black November 2026 <span>· Painel</span></span>
+    </div>
+    <div class="topo__acoes">
+      <p class="ao-vivo" id="ao-vivo" data-estado="carregando" role="status" aria-live="polite">
+        <span class="ao-vivo__ponto" aria-hidden="true"></span>
+        <span id="ao-vivo-texto">Carregando dados…</span>
+      </p>
+      <button class="botao botao--fantasma botao--icone" type="button" id="copiar-link" title="Copiar o link com os filtros atuais">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span>Copiar link</span>
+      </button>
+      <span class="topo__usuario" id="usuario"></span>
+      <a class="botao botao--fantasma" href="sair">Sair</a>
+    </div>
+  </header>
+
+  <nav class="abas" role="tablist" aria-label="Seções do painel">
+    <button class="abas__item" role="tab" id="aba-geral" aria-controls="painel-geral" aria-selected="true" data-aba="geral">Visão geral</button>
+    <button class="abas__item" role="tab" id="aba-cadastros" aria-controls="painel-cadastros" aria-selected="false" tabindex="-1" data-aba="cadastros">
+      Cadastros <span class="abas__contagem" id="contagem-cadastros">0</span>
+    </button>
+    <button class="abas__item" role="tab" id="aba-pessoas" aria-controls="painel-pessoas" aria-selected="false" tabindex="-1" data-aba="pessoas">Gravações <span class="abas__contagem abas__contagem--viva" id="contagem-gravacoes">0</span></button>
+    <button class="abas__item" role="tab" id="aba-origens" aria-controls="painel-origens" aria-selected="false" tabindex="-1" data-aba="origens">Origens e UTMs</button>
+    <button class="abas__item" role="tab" id="aba-eventos" aria-controls="painel-eventos" aria-selected="false" tabindex="-1" data-aba="eventos">Eventos do GTM</button>
+    <button class="abas__item" role="tab" id="aba-mapa" aria-controls="painel-mapa" aria-selected="false" tabindex="-1" data-aba="mapa">Mapa de cliques</button>
+    <span class="abas__indicador" aria-hidden="true"></span>
+  </nav>
+
+  <section class="filtros" aria-label="Filtros (valem para todas as abas)">
+    <div class="filtros__linha">
+      <div class="periodos" id="periodos" role="group" aria-label="Período">
+        <button type="button" data-periodo="hoje">Hoje</button>
+        <button type="button" data-periodo="ontem">Ontem</button>
+        <button type="button" data-periodo="24h">24 horas</button>
+        <button type="button" data-periodo="7d">7 dias</button>
+        <button type="button" data-periodo="30d">30 dias</button>
+        <button type="button" data-periodo="tudo">Toda a campanha</button>
+        <button type="button" data-periodo="personalizado">Personalizado</button>
+      </div>
+      <div class="datas" id="datas" hidden>
+        <label><span class="visualmente-oculto">De</span><input type="datetime-local" id="f-de" aria-label="De"></label>
+        <span class="datas__ate" aria-hidden="true">até</span>
+        <label><span class="visualmente-oculto">Até</span><input type="datetime-local" id="f-ate" aria-label="Até"></label>
+      </div>
+    </div>
+    <div class="filtros__linha" id="filtros-dimensoes"></div>
+    <div class="ativos" id="ativos" hidden></div>
+  </section>
+
+  <main class="conteudo">
+    <p class="aviso-demo" id="aviso-demo" hidden>
+      <strong>Modo demonstração.</strong> Os números são fictícios e gerados neste navegador, para mostrar o painel funcionando.
+      Os dados reais aparecem em /admin/ no endereço da LP, servido pelo Worker do Cloudflare.
+    </p>
+    <p class="aviso-erro" id="aviso-erro" role="alert" hidden></p>
+
+    <!-- ===================== 1. Visão geral ===================== -->
+    <section class="painel" id="painel-geral" role="tabpanel" aria-labelledby="aba-geral">
+      <div class="kpis kpis--5">
+        <article class="kpi kpi--destaque" data-kpi="cadastros">
+          <h2 class="kpi__rotulo">Cadastros</h2>
+          <p class="kpi__valor" id="k-cadastros">0</p>
+          <p class="kpi__delta" id="k-cadastros-delta"></p>
+          <div class="kpi__faisca" id="f-cadastros"></div>
+          <p class="kpi__nota" id="k-cadastros-nota"></p>
+        </article>
+        <article class="kpi" data-kpi="acessos">
+          <h2 class="kpi__rotulo">Acessos</h2>
+          <p class="kpi__valor" id="k-acessos">0</p>
+          <p class="kpi__delta" id="k-acessos-delta"></p>
+          <div class="kpi__faisca" id="f-acessos"></div>
+          <p class="kpi__nota" id="k-acessos-nota"></p>
+        </article>
+        <article class="kpi" data-kpi="visitantes">
+          <h2 class="kpi__rotulo">Visitantes únicos</h2>
+          <p class="kpi__valor" id="k-visitantes">0</p>
+          <p class="kpi__delta" id="k-visitantes-delta"></p>
+          <div class="kpi__faisca" id="f-visitantes"></div>
+          <p class="kpi__nota">um por navegador</p>
+        </article>
+        <article class="kpi" data-kpi="conversao">
+          <h2 class="kpi__rotulo">Conversão</h2>
+          <p class="kpi__valor" id="k-conversao">0%</p>
+          <p class="kpi__delta" id="k-conversao-delta"></p>
+          <div class="kpi__faisca" id="f-conversao"></div>
+          <p class="kpi__nota">cadastros ÷ visitantes</p>
+        </article>
+        <article class="kpi kpi--agora">
+          <h2 class="kpi__rotulo"><span class="pulso" aria-hidden="true"></span>Agora na página</h2>
+          <p class="kpi__valor" id="k-agora">0</p>
+          <p class="kpi__delta" id="k-agora-nota">ativos nos últimos 2 minutos</p>
+          <div class="kpi__ondas" aria-hidden="true"><span></span><span></span><span></span></div>
+        </article>
+      </div>
+
+      <article class="cartao">
+        <header class="cartao__topo cartao__topo--acoes">
+          <div>
+            <h2>Evolução</h2>
+            <p id="evolucao-sub">clique num ponto para aproximar o período</p>
+          </div>
+          <div class="controles">
+            <div class="segmentos" id="metricas" role="group" aria-label="Métrica">
+              <button type="button" data-metrica="acessos">Acessos</button>
+              <button type="button" data-metrica="visitantes">Visitantes</button>
+              <button type="button" data-metrica="cadastros">Cadastros</button>
+              <button type="button" data-metrica="conversao">Conversão</button>
+            </div>
+            <div class="segmentos" id="granularidades" role="group" aria-label="Agrupar por">
+              <button type="button" data-granularidade="auto">Auto</button>
+              <button type="button" data-granularidade="hora">Hora</button>
+              <button type="button" data-granularidade="dia">Dia</button>
+            </div>
+            <label class="chave">
+              <input type="checkbox" id="comparar">
+              <span class="chave__trilho" aria-hidden="true"></span>
+              Comparar com o período anterior
+            </label>
+          </div>
+        </header>
+        <div class="grafico grafico--alto" id="g-evolucao"></div>
+        <div class="legenda" id="legenda-evolucao"></div>
+      </article>
+
+      <div class="grade grade--2">
+        <article class="cartao">
+          <header class="cartao__topo">
+            <h2>Funil</h2>
+            <p>visitantes únicos em cada etapa</p>
+          </header>
+          <div id="funil"></div>
+        </article>
+        <article class="cartao">
+          <header class="cartao__topo">
+            <h2>Últimos cadastros</h2>
+            <p>chegam sozinhos, em tempo real</p>
+          </header>
+          <ol class="ultimos" id="ultimos"></ol>
+        </article>
+      </div>
+
+      <div class="grade grade--2">
+        <article class="cartao">
+          <header class="cartao__topo cartao__topo--acoes">
+            <div>
+              <h2>Ranking</h2>
+              <p>cadastros por valor; clique numa barra para filtrar</p>
+            </div>
+            <div class="segmentos" id="ranking-dimensoes" role="group" aria-label="Ranking por"></div>
+          </header>
+          <div id="ranking"></div>
+        </article>
+        <article class="cartao">
+          <header class="cartao__topo cartao__topo--acoes">
+            <div>
+              <h2>Quando o público chega</h2>
+              <p>dia da semana × hora, horário de Brasília</p>
+            </div>
+            <div class="segmentos" id="calor-metricas" role="group" aria-label="Métrica do mapa">
+              <button type="button" data-calor="acessos">Acessos</button>
+              <button type="button" data-calor="cadastros">Cadastros</button>
+            </div>
+          </header>
+          <div class="calor" id="calor"></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ===================== 2. Cadastros ===================== -->
+    <section class="painel" id="painel-cadastros" role="tabpanel" aria-labelledby="aba-cadastros" hidden>
+      <div class="kpis kpis--4">
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Cadastros no período</h2>
+          <p class="kpi__valor" id="c-total">0</p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">E-mails únicos</h2>
+          <p class="kpi__valor" id="c-unicos">0</p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Cadastros repetidos</h2>
+          <p class="kpi__valor" id="c-repetidos">0</p>
+          <p class="kpi__nota">mesmo e-mail mais de uma vez</p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Último cadastro</h2>
+          <p class="kpi__valor" id="c-ultimo">—</p>
+          <p class="kpi__nota" id="c-ultimo-nota"></p>
+        </article>
+      </div>
+
+      <article class="cartao cartao--tabela">
+        <div class="barra-ferramentas">
+          <label class="busca">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <span class="visualmente-oculto">Buscar cadastros</span>
+            <input type="search" id="busca" placeholder="Buscar por nome, e-mail ou WhatsApp  ( / )" autocomplete="off">
+          </label>
+          <label class="seletor-pequeno">
+            <span>Linhas</span>
+            <select id="por-pagina">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+          <button class="botao" type="button" id="exportar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+            Exportar CSV
+          </button>
+        </div>
+        <div class="tabela-rolagem tabela-rolagem--alta">
+          <table class="tabela" id="tabela-cadastros">
+            <thead>
+              <tr>
+                <th scope="col" data-ordem="ts" aria-sort="descending"><button type="button">Data e hora</button></th>
+                <th scope="col" data-ordem="nome"><button type="button">Nome</button></th>
+                <th scope="col" data-ordem="email"><button type="button">E-mail</button></th>
+                <th scope="col">WhatsApp</th>
+                <th scope="col" data-ordem="origem"><button type="button">Origem / mídia</button></th>
+                <th scope="col" data-ordem="utm_campaign"><button type="button">Campanha</button></th>
+                <th scope="col" data-ordem="utm_content"><button type="button">Conjunto</button></th>
+                <th scope="col" data-ordem="utm_term"><button type="button">Anúncio</button></th>
+                <th scope="col" data-ordem="cta"><button type="button">Botão</button></th>
+                <th scope="col" data-ordem="dispositivo"><button type="button">Dispositivo</button></th>
+                <th scope="col" data-ordem="local"><button type="button">Local</button></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <footer class="paginacao">
+          <p id="paginacao-texto"></p>
+          <div>
+            <button class="botao botao--fantasma" type="button" id="pagina-anterior">Anterior</button>
+            <button class="botao botao--fantasma" type="button" id="pagina-proxima">Próxima</button>
+          </div>
+        </footer>
+      </article>
+    </section>
+
+    <!-- ===================== Gravações (estilo Clarity) ===================== -->
+    <section class="painel painel--estudio" id="painel-pessoas" role="tabpanel" aria-labelledby="aba-pessoas" hidden>
+      <div class="estudio">
+        <aside class="estudio__lista" aria-label="Visitas">
+          <header class="estudio__cabeca">
+            <div class="estudio__titulo">
+              <h2>Pessoas</h2>
+              <span class="estudio__total" id="est-contagem"></span>
+            </div>
+            <label class="busca busca--estudio">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <span class="visualmente-oculto">Buscar visitas</span>
+              <input type="search" id="busca-pessoas" placeholder="Nome, e-mail, cidade, criativo…" autocomplete="off">
+            </label>
+            <div class="estudio__filtros" id="pessoas-filtros" role="group" aria-label="Mostrar">
+              <button type="button" data-pessoas="gravadas">Gravadas</button>
+              <button type="button" data-pessoas="todas">Todas</button>
+              <button type="button" data-pessoas="cadastraram">Cadastraram</button>
+              <button type="button" data-pessoas="abriram">Formulário</button>
+              <button type="button" data-pessoas="frustracao">Frustração</button>
+              <button type="button" data-pessoas="rapidas">Saíram rápido</button>
+            </div>
+            <label class="estudio__ordem">
+              <span>Ordenar por</span>
+              <select id="pessoas-ordem">
+                <option value="recentes">Mais recentes</option>
+                <option value="engajamento">Mais engajadas</option>
+                <option value="longas">Mais longas</option>
+                <option value="cliques">Mais cliques</option>
+                <option value="frustracao">Mais frustração</option>
+              </select>
+            </label>
+          </header>
+          <ol class="estudio__itens" id="est-itens" role="listbox" aria-label="Visitas" tabindex="-1"></ol>
+          <div class="estudio__mais" id="est-mais" aria-hidden="true"><span></span><span></span><span></span></div>
+        </aside>
+
+        <div class="estudio__ficha" id="est-ficha">
+          <div class="estudio__vazio" id="est-vazio">
+            <div class="estudio__vazio-icone" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="m10 8 5 3-5 3z"/><path d="M8 21h8"/></svg>
+            </div>
+            <h2>Escolha uma pessoa</h2>
+            <p>Selecione uma visita na lista para ver quem é, de onde veio e assistir ao que ela fez na página.</p>
+            <p class="estudio__atalhos"><kbd>↑</kbd><kbd>↓</kbd> trocar de pessoa · <kbd>espaço</kbd> play · <kbd>←</kbd><kbd>→</kbd> 5 segundos</p>
+          </div>
+
+          <article class="ficha" id="ficha" hidden>
+            <header class="ficha__topo">
+              <div class="ficha__avatar" id="f-avatar" aria-hidden="true"></div>
+              <div class="ficha__quem">
+                <p class="ficha__rotulo" id="f-rotulo"></p>
+                <h2 id="rep-titulo">Visita</h2>
+                <p class="ficha__sub" id="rep-sub"></p>
+                <ol class="ficha__trilha" id="f-trilha" aria-label="De onde veio"></ol>
+              </div>
+              <div class="ficha__nota" title="Nota de engajamento: tempo, rolagem, cliques e funil">
+                <svg viewBox="0 0 120 120" aria-hidden="true">
+                  <circle class="ficha__anel-fundo" cx="60" cy="60" r="50"/>
+                  <circle class="ficha__anel" id="f-anel" cx="60" cy="60" r="50"/>
+                </svg>
+                <div class="ficha__nota-texto">
+                  <strong id="f-pontos">0</strong>
+                  <span>engajamento</span>
+                </div>
+              </div>
+            </header>
+
+            <div class="ficha__metricas" id="f-metricas"></div>
+
+            <div class="ficha__corpo">
+              <div class="ficha__palco">
+                <div class="ficha__aparelho" id="f-aparelho">
+                  <div class="reproducao__visor" id="rep-visor"></div>
+                </div>
+                <p class="reproducao__aviso" id="rep-aviso" hidden></p>
+                <div class="reproducao__controles" id="rep-controles">
+                  <button class="botao reproducao__tocar" type="button" id="rep-tocar" aria-label="Reproduzir">▶</button>
+                  <span class="reproducao__tempo" id="rep-tempo">0:00 / 0:00</span>
+                  <div class="reproducao__linha">
+                    <div class="reproducao__marcas" id="rep-marcas"></div>
+                    <input type="range" id="rep-barra" min="0" max="1000" step="100" value="0" aria-label="Posição na gravação">
+                  </div>
+                  <div class="estudio__velocidades" id="rep-velocidades" role="group" aria-label="Velocidade">
+                    <button type="button" data-velocidade="1">1×</button>
+                    <button type="button" data-velocidade="2">2×</button>
+                    <button type="button" data-velocidade="4">4×</button>
+                    <button type="button" data-velocidade="8">8×</button>
+                  </div>
+                  <label class="chave">
+                    <input type="checkbox" id="rep-pular" checked>
+                    <span class="chave__trilho" aria-hidden="true"></span>
+                    Pular pausas
+                  </label>
+                </div>
+              </div>
+
+              <aside class="ficha__tempo">
+                <h3>Linha do tempo</h3>
+                <ol class="linha-tempo" id="rep-jornada"></ol>
+                <section class="ficha__outras" id="rep-outras">
+                  <h3>Outras visitas desta pessoa</h3>
+                  <ul class="outras-visitas" id="rep-visitas"></ul>
+                </section>
+              </aside>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 3. Origens e UTMs ===================== -->
+    <section class="painel" id="painel-origens" role="tabpanel" aria-labelledby="aba-origens" hidden>
+      <div class="kpis kpis--3">
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Visitas com UTM</h2>
+          <p class="kpi__valor" id="k-com-utm">0%</p>
+          <p class="kpi__nota" id="k-com-utm-nota"></p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Vindas de anúncio</h2>
+          <p class="kpi__valor" id="k-anuncio">0%</p>
+          <p class="kpi__nota">com gclid, fbclid, ttclid ou similar</p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Sem origem identificada</h2>
+          <p class="kpi__valor" id="k-sem-origem">0%</p>
+          <p class="kpi__nota">sem UTM e sem site de referência</p>
+        </article>
+      </div>
+
+      <article class="cartao cartao--tabela">
+        <header class="cartao__topo cartao__topo--acoes">
+          <div>
+            <h2>Desempenho por <span id="dimensao-nome">origem</span></h2>
+            <p>clique numa linha para filtrar o painel inteiro por ela</p>
+          </div>
+          <label class="busca busca--pequena">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <span class="visualmente-oculto">Buscar na tabela</span>
+            <input type="search" id="busca-origens" placeholder="Buscar valor" autocomplete="off">
+          </label>
+        </header>
+        <div class="segmentos segmentos--rolagem" id="dimensoes" role="group" aria-label="Agrupar por"></div>
+        <div class="tabela-rolagem tabela-rolagem--alta">
+          <table class="tabela tabela--numeros" id="tabela-origens">
+            <thead>
+              <tr>
+                <th scope="col" data-ordem="valor"><button type="button" id="origens-coluna">Origem</button></th>
+                <th scope="col" class="num" data-ordem="visitantes" aria-sort="descending"><button type="button">Visitantes</button></th>
+                <th scope="col" class="num" data-ordem="acessos"><button type="button">Acessos</button></th>
+                <th scope="col" class="num" data-ordem="cadastros"><button type="button">Cadastros</button></th>
+                <th scope="col" class="num" data-ordem="conversao"><button type="button">Conversão</button></th>
+                <th scope="col" class="col-barra">Parte dos cadastros</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <!-- ===================== 4. Eventos do GTM ===================== -->
+    <section class="painel" id="painel-eventos" role="tabpanel" aria-labelledby="aba-eventos" hidden>
+      <div class="kpis kpis--4">
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Tempo típico na página</h2>
+          <p class="kpi__valor" id="k-tempo">—</p>
+          <p class="kpi__nota">mediana do tempo com a página à vista</p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Rolagem média</h2>
+          <p class="kpi__valor" id="k-rolagem">0%</p>
+          <p class="kpi__nota">até onde a página foi rolada</p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Aberturas do formulário</h2>
+          <p class="kpi__valor" id="k-aberturas">0</p>
+          <p class="kpi__nota" id="k-aberturas-nota"></p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Formulário → cadastro</h2>
+          <p class="kpi__valor" id="k-form-conv">0%</p>
+          <p class="kpi__nota">visitantes que abriram e se cadastraram</p>
+        </article>
+      </div>
+
+      <div class="grade grade--2">
+        <article class="cartao cartao--tabela">
+          <header class="cartao__topo">
+            <h2>Eventos do dataLayer</h2>
+            <p>clique num evento para ver a evolução ao lado</p>
+          </header>
+          <div class="tabela-rolagem">
+            <table class="tabela tabela--numeros" id="tabela-eventos">
+              <thead>
+                <tr>
+                  <th scope="col" data-ordem="evento"><button type="button">Evento</button></th>
+                  <th scope="col" class="num" data-ordem="total" aria-sort="descending"><button type="button">Ocorrências</button></th>
+                  <th scope="col" class="num" data-ordem="sessoes"><button type="button">Sessões</button></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </article>
+        <article class="cartao">
+          <header class="cartao__topo">
+            <h2 id="g-evento-titulo">Evento</h2>
+            <p id="g-evento-sub"></p>
+          </header>
+          <div class="grafico" id="g-evento"></div>
+        </article>
+      </div>
+
+      <div class="grade grade--2">
+        <article class="cartao">
+          <header class="cartao__topo">
+            <h2>Botões que abriram o formulário</h2>
+            <p>aberturas e cadastros por botão</p>
+          </header>
+          <div id="botoes"></div>
+        </article>
+        <article class="cartao">
+          <header class="cartao__topo">
+            <h2>Profundidade de rolagem</h2>
+            <p>sessões pela maior rolagem alcançada</p>
+          </header>
+          <div id="rolagem"></div>
+        </article>
+      </div>
+
+      <article class="cartao cartao--tabela">
+        <header class="cartao__topo cartao__topo--acoes">
+          <div>
+            <h2>Ao vivo</h2>
+            <p>os 60 eventos mais recentes do período</p>
+          </div>
+          <label class="chave">
+            <input type="checkbox" id="mostrar-pulsos">
+            <span class="chave__trilho" aria-hidden="true"></span>
+            Mostrar pulsos de engajamento
+          </label>
+        </header>
+        <div class="tabela-rolagem tabela-rolagem--alta">
+          <table class="tabela" id="tabela-feed">
+            <thead>
+              <tr>
+                <th scope="col">Hora</th>
+                <th scope="col">Evento</th>
+                <th scope="col">Detalhe</th>
+                <th scope="col">Origem / mídia</th>
+                <th scope="col">Dispositivo</th>
+                <th scope="col">Local</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <!-- ===================== 5. Mapa de cliques ===================== -->
+    <section class="painel" id="painel-mapa" role="tabpanel" aria-labelledby="aba-mapa" hidden>
+      <div class="kpis kpis--4">
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Cliques e toques</h2>
+          <p class="kpi__valor" id="m-total">0</p>
+          <p class="kpi__nota">no período e nos filtros escolhidos</p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">No computador</h2>
+          <p class="kpi__valor" id="m-computador">0</p>
+          <p class="kpi__nota" id="m-computador-nota"></p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">No celular</h2>
+          <p class="kpi__valor" id="m-celular">0</p>
+          <p class="kpi__nota" id="m-celular-nota"></p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Fora da página</h2>
+          <p class="kpi__valor" id="m-fixos">0</p>
+          <p class="kpi__nota">no formulário e na barra fixa, que não aparecem no mapa</p>
+        </article>
+      </div>
+
+      <article class="cartao">
+        <header class="cartao__topo cartao__topo--acoes">
+          <div>
+            <h2>Mapa da LP</h2>
+            <p>a página real, sem scripts; role dentro de cada aparelho para ver a página inteira</p>
+          </div>
+          <div class="segmentos" id="mapa-modos" role="group" aria-label="Tipo de mapa">
+            <button type="button" data-mapa="calor">Calor</button>
+            <button type="button" data-mapa="pontos">Pontos</button>
+            <button type="button" data-mapa="rolagem">Rolagem</button>
+          </div>
+        </header>
+        <div class="mapa">
+          <figure class="mapa__lado">
+            <figcaption><strong>Computador</strong> <span id="mapa-computador-legenda"></span></figcaption>
+            <div class="mapa__aparelho mapa__aparelho--computador"><div class="mapa__visor" id="visor-computador"></div></div>
+          </figure>
+          <figure class="mapa__lado">
+            <figcaption><strong>Celular</strong> <span id="mapa-celular-legenda"></span></figcaption>
+            <div class="mapa__aparelho mapa__aparelho--celular"><div class="mapa__visor" id="visor-celular"></div></div>
+          </figure>
+        </div>
+        <div class="mapa__escala" id="mapa-escala"></div>
+      </article>
+
+      <div class="grade grade--2">
+        <article class="cartao cartao--tabela">
+          <header class="cartao__topo">
+            <h2>Mais clicados no computador</h2>
+            <p>elementos que receberam cliques</p>
+          </header>
+          <div class="tabela-rolagem">
+            <table class="tabela tabela--numeros" id="tabela-cliques-computador">
+              <thead><tr><th scope="col">Elemento</th><th scope="col" class="num">Cliques</th><th scope="col" class="num">Parte</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </article>
+        <article class="cartao cartao--tabela">
+          <header class="cartao__topo">
+            <h2>Mais tocados no celular</h2>
+            <p>elementos que receberam toques</p>
+          </header>
+          <div class="tabela-rolagem">
+            <table class="tabela tabela--numeros" id="tabela-cliques-celular">
+              <thead><tr><th scope="col">Elemento</th><th scope="col" class="num">Toques</th><th scope="col" class="num">Parte</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </article>
+      </div>
+
+      <div class="grade grade--2">
+        <article class="cartao cartao--tabela">
+          <header class="cartao__topo">
+            <h2>Cliques sem efeito</h2>
+            <p>onde as pessoas clicam ou tocam em algo que não é clicável</p>
+          </header>
+          <div class="tabela-rolagem">
+            <table class="tabela tabela--numeros" id="tabela-sem-efeito">
+              <thead><tr><th scope="col">Elemento</th><th scope="col" class="num">Cliques</th><th scope="col" class="num">Visitas</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </article>
+        <article class="cartao cartao--tabela">
+          <header class="cartao__topo">
+            <h2>Cliques de raiva</h2>
+            <p>3 ou mais cliques seguidos no mesmo ponto, em menos de 1,5 segundo</p>
+          </header>
+          <div class="tabela-rolagem">
+            <table class="tabela tabela--numeros" id="tabela-raiva">
+              <thead><tr><th scope="col">Elemento</th><th scope="col" class="num">Vezes</th><th scope="col" class="num">Visitas</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <dialog class="detalhe" id="detalhe" aria-labelledby="detalhe-titulo">
+    <div class="detalhe__topo">
+      <h2 id="detalhe-titulo">Cadastro</h2>
+      <button class="botao botao--fantasma" type="button" id="detalhe-fechar">Fechar</button>
+    </div>
+    <div id="detalhe-corpo"></div>
+  </dialog>
+
+  <div class="dica" id="dica" role="tooltip" hidden></div>
+  <div class="avisos" id="avisos" aria-live="polite"></div>
+</body>
+</html>

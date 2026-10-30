@@ -10,3 +10,7 @@
 /assets/img/Logo-03-BLACK-november.png
 /assets/img/LOGO-ACESSO VITALICIO.png
 /assets/img/cursos/escola-contabil.svg
+
+# estado local do wrangler (teste do Worker e do D1) e segredos de teste
+.wrangler/
+.dev.vars

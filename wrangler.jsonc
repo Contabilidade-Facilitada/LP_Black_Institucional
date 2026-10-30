@@ -1,0 +1,35 @@
+// Publicação no Cloudflare (Workers com arquivos estáticos). O Cloudflare lê
+// este arquivo a cada push no repositório; pela linha de comando:
+//   npx wrangler deploy
+//
+// "name" precisa ser o nome do Worker que já publica esta LP (Workers & Pages
+// no painel do Cloudflare); com outro nome, o build falha ou cria um segundo
+// Worker. ADMIN_EMAIL, ADMIN_SENHA e ADMIN_CHAVE são segredos: ficam só no
+// Cloudflare, e o deploy não mexe neles (ver cloudflare/worker.js).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lp-black-institucional",
+  "main": "cloudflare/worker.js",
+  "compatibility_date": "2026-10-01",
+  // domínio próprio: o deploy cria o registro DNS e o certificado na zona
+  // contabilidadefacilitada.com.br. O endereço *.workers.dev continua ativo.
+  "routes": [
+    { "pattern": "blacknovember.contabilidadefacilitada.com.br", "custom_domain": true }
+  ],
+  "assets": {
+    // a raiz do repositório é o site; o .assetsignore tira o que não é
+    "directory": ".",
+    "binding": "ASSETS",
+    // o Worker atende antes dos arquivos: medição, login do painel e mapa
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      // o mesmo banco da Esquenta Black, com tabelas _pf (cloudflare/schema.sql)
+      "binding": "DB",
+      "database_name": "lp-black",
+      "database_id": "b253b35d-278c-4f34-ae8a-5e61d354e1e1"
+    }
+  ],
+  "observability": { "enabled": true }
+}

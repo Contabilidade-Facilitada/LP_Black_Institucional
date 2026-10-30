@@ -1,0 +1,24 @@
+# arquivos do repositório que não são do site (lidos pelo wrangler ao publicar
+# a raiz como arquivos estáticos, ver wrangler.jsonc)
+.git
+.gitignore
+.wrangler
+node_modules
+cloudflare
+wrangler.jsonc
+.dev.vars
+.assetsignore
+
+# imagens brutas fora do git (ver .gitignore); só existem em cópias locais,
+# mas não podem subir num deploy feito da linha de comando
+assets/img/Depoimentos
+assets/img/Group 784.png
+assets/img/t_r5.png
+assets/img/FAIXA-LARANJA.png
+assets/img/FAIXA-LARANJA2.png
+assets/img/FAIXA-PRETA.png
+assets/img/FAIXA-PRETA2.png
+assets/img/LOGO BLACK NOVEMBER.png
+assets/img/Logo-03-BLACK-november.png
+assets/img/LOGO-ACESSO VITALICIO.png
+assets/img/cursos/escola-contabil.svg

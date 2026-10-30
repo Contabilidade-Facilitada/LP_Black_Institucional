@@ -67,13 +67,28 @@
      Atribuição: guarda as UTMs da primeira página vista na sessão
      --------------------------------------------------------- */
   const CHAVES_UTM = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
+  // identificadores de clique que as plataformas de anúncio põem na URL
+  const CLIQUES = {
+    gclid: "google", gbraid: "google", wbraid: "google", fbclid: "meta",
+    ttclid: "tiktok", msclkid: "microsoft", li_fat_id: "linkedin",
+  };
 
   const atribuicao = (() => {
     const daUrl = new URLSearchParams(location.search);
     const salva = armazenamento.ler("cf_black_pf_utm", sessionStorage) || {};
     const temNaUrl = CHAVES_UTM.some((c) => daUrl.get(c));
     const novaEntrada = temNaUrl || !salva.urlCompleta;
-    const dados = { urlCompleta: novaEntrada ? location.href : salva.urlCompleta };
+    const clique = Object.keys(CLIQUES).find((c) => daUrl.get(c));
+    let referencia = "";
+    try {
+      const host = document.referrer ? new URL(document.referrer).hostname : "";
+      if (host !== location.hostname) referencia = host;
+    } catch { /* referrer malformado */ }
+    const dados = {
+      urlCompleta: novaEntrada ? location.href : salva.urlCompleta,
+      clique: clique ? CLIQUES[clique] : salva.clique || "",
+      referencia: novaEntrada ? referencia : salva.referencia || "",
+    };
     CHAVES_UTM.forEach((c) => { dados[c] = (temNaUrl ? daUrl.get(c) : salva[c]) || ""; });
     armazenamento.gravar("cf_black_pf_utm", dados, sessionStorage);
     return dados;
@@ -82,6 +97,282 @@
   function empurrarEvento(evento, extra = {}) {
     if (Array.isArray(window.dataLayer)) window.dataLayer.push({ event: evento, ...extra });
   }
+
+  /* ---------------------------------------------------------
+     Medição própria para o painel em /admin/: o acesso, todos os eventos
+     que passam pelo dataLayer (os desta página e os do GTM), o engajamento,
+     os cliques e uma cópia de cada cadastro. Vai em lotes para o Worker
+     (cloudflare/worker.js), que grava no D1; falhas são silenciosas.
+     Mesmo formato da LP Esquenta Black, sem o teste A/B.
+     --------------------------------------------------------- */
+  const rastreio = (() => {
+    // relativo: api/coleta, atendido pelo Worker
+    const DESTINO = "api/coleta";
+    const novoId = () => crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+
+    let visitante = armazenamento.ler("cf_black_pf_vid");
+    if (!visitante) { visitante = novoId(); armazenamento.gravar("cf_black_pf_vid", visitante); }
+    let sessao = armazenamento.ler("cf_black_pf_sid", sessionStorage);
+    if (!sessao) { sessao = novoId(); armazenamento.gravar("cf_black_pf_sid", sessao, sessionStorage); }
+
+    const identificacao = { v: visitante, s: sessao };
+    const contexto = {
+      pagina: location.pathname,
+      ref: atribuicao.referencia,
+      clique: atribuicao.clique,
+      ...Object.fromEntries(CHAVES_UTM.map((c) => [c, atribuicao[c]])),
+    };
+
+    const fila = [];
+    let espera = 0;
+
+    // "dt": há quanto tempo o evento aconteceu, para o servidor datar certo
+    function enviar(saindo = false) {
+      clearTimeout(espera);
+      espera = 0;
+      while (fila.length) {
+        const agora = Date.now();
+        const eventos = fila.splice(0, 20).map(({ t, ...e }) => ({ ...e, dt: agora - t }));
+        const corpo = JSON.stringify({ ...identificacao, eventos });
+        if (saindo && navigator.sendBeacon?.(DESTINO, new Blob([corpo], { type: "text/plain" }))) continue;
+        fetch(DESTINO, { method: "POST", body: corpo, keepalive: true }).catch(() => {});
+      }
+    }
+
+    function registrar(evento, { detalhe, valor, ctx } = {}) {
+      fila.push({ e: evento, d: detalhe, n: valor, ctx, t: Date.now() });
+      if (fila.length >= 20) enviar();
+      else if (!espera) espera = setTimeout(enviar, 2000);
+    }
+
+    // Lê o dataLayer pelo índice em vez de interceptar o push: o GTM troca o
+    // push do array quando carrega, e a leitura funciona antes e depois disso
+    // (e também quando um bloqueador impede o GTM de carregar). Ficam de fora
+    // os eventos internos do ciclo de carregamento do GTM.
+    const IGNORADOS = /^gtm\.(js|dom|load|init|init_consent|timer|historyChange)/;
+    let lidos = 0;
+    function lerDataLayer() {
+      const camada = window.dataLayer;
+      if (!Array.isArray(camada)) return;
+      for (; lidos < camada.length; lidos++) {
+        const item = camada[lidos];
+        if (!item || typeof item.event !== "string" || IGNORADOS.test(item.event)) continue;
+        const detalhe = item.cta ?? item["gtm.elementText"] ?? item["gtm.scrollThreshold"]
+          ?? item["gtm.elementUrl"] ?? item["gtm.videoStatus"];
+        registrar(item.event, { detalhe: detalhe == null ? undefined : String(detalhe).trim().slice(0, 200) });
+      }
+    }
+
+    // engajamento: segundos com a página visível e a maior rolagem (%)
+    let visivelMs = 0;
+    let visivelDesde = document.visibilityState === "visible" ? performance.now() : 0;
+    let rolagemMax = 0;
+    let pulsos = 0;
+    let medindo = false;
+
+    function medirRolagem() {
+      medindo = false;
+      const total = document.documentElement.scrollHeight - window.innerHeight;
+      const pct = total > 0 ? Math.round(Math.min(1, window.scrollY / total) * 100) : 100;
+      if (pct > rolagemMax) rolagemMax = pct;
+    }
+    window.addEventListener("scroll", () => {
+      if (!medindo) { medindo = true; requestAnimationFrame(medirRolagem); }
+    }, { passive: true });
+
+    function engajamento() {
+      const ms = visivelMs + (visivelDesde ? performance.now() - visivelDesde : 0);
+      registrar("engajamento", { detalhe: String(rolagemMax), valor: Math.round(ms / 1000) });
+    }
+
+    // um pulso por minuto com a página à vista alimenta o "agora na página"
+    // do painel; para depois de 30 minutos
+    setInterval(() => {
+      if (document.visibilityState !== "visible" || pulsos >= 30) return;
+      pulsos++;
+      engajamento();
+    }, 60000);
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") {
+        if (visivelDesde) { visivelMs += performance.now() - visivelDesde; visivelDesde = 0; }
+        lerDataLayer();
+        engajamento();
+        enviar(true);
+      } else {
+        visivelDesde = performance.now();
+      }
+    });
+    window.addEventListener("pagehide", () => { lerDataLayer(); enviar(true); });
+
+    // Mapa de cliques do painel: cada clique ou toque vai preso ao elemento em
+    // que caiu (caminho de seletores + ponto dentro dele, de 0 a 1), para ser
+    // redesenhado por cima da página em qualquer largura de tela. Vai junto a
+    // posição na página (relativa ao centro), usada quando o elemento não
+    // existe na página estática do painel (os criados por script).
+    const caminhoDe = (el) => {
+      const partes = [];
+      for (let no = el; no && no !== document.body && partes.length < 14; no = no.parentElement) {
+        if (no.id) { partes.unshift(`#${CSS.escape(no.id)}`); return partes.join(">"); }
+        let ordem = 1;
+        for (let irmao = no.previousElementSibling; irmao; irmao = irmao.previousElementSibling) {
+          if (irmao.tagName === no.tagName) ordem++;
+        }
+        partes.unshift(`${no.tagName.toLowerCase()}:nth-of-type(${ordem})`);
+      }
+      return partes.length ? `body>${partes.join(">")}` : "body";
+    };
+    const emElementoFixo = (el) => {
+      for (let no = el; no && no !== document.body; no = no.parentElement) {
+        if (getComputedStyle(no).position === "fixed") return true;
+      }
+      return false;
+    };
+    let cliques = 0;
+    document.addEventListener("click", (e) => {
+      if (cliques >= 40 || !(e.target instanceof Element)) return;
+      cliques++;
+      const CLICAVEIS = "a, button, input, select, textarea, label, summary, [role='button'], [data-abrir-lead]";
+      let alvo = e.target.closest(CLICAVEIS) || e.target;
+      while (alvo instanceof SVGElement && alvo.parentElement) alvo = alvo.parentElement;
+      if (alvo === document.documentElement) alvo = document.body;
+      const r = alvo.getBoundingClientRect();
+      // rótulo legível para a lista do painel: innerText (sem o código dos
+      // scripts); de campo, só o nome, nunca o valor. Imagem e ícone sem
+      // texto levam o texto do bloco em volta (o cartão da pós, por exemplo)
+      let texto = (/^(INPUT|SELECT|TEXTAREA)$/.test(alvo.tagName) ? `Campo ${alvo.name || alvo.type || ""}` : alvo.innerText) || "";
+      for (let no = alvo.parentElement, n = 0; !texto.trim() && no && no !== document.body && n < 4; no = no.parentElement, n++) {
+        texto = no.innerText || "";
+      }
+      const rotulo = alvo === document.body ? "(fundo da página)"
+        : (alvo.getAttribute("aria-label") || alvo.getAttribute("alt") || texto)
+          .trim().replace(/\s+/g, " ").slice(0, 60);
+      registrar("clique", {
+        valor: window.innerWidth,
+        detalhe: JSON.stringify({
+          c: caminhoDe(alvo),
+          x: r.width ? +((e.clientX - r.left) / r.width).toFixed(3) : 0.5,
+          y: r.height ? +((e.clientY - r.top) / r.height).toFixed(3) : 0.5,
+          px: Math.round(e.pageX - window.innerWidth / 2),
+          py: Math.round(e.pageY),
+          f: emElementoFixo(alvo) ? 1 : 0,
+          // 0 = clicou em algo que não é clicável ("clique sem efeito" no painel)
+          k: alvo.matches(CLICAVEIS) ? 1 : 0,
+          l: rotulo,
+        }),
+      });
+    }, { capture: true, passive: true });
+
+    // Gravação da visita para a reprodução do painel (aba Gravações): rolagem,
+    // ponteiro do mouse, abertura do formulário e troca de aba, em texto
+    // compacto ("tempo,tipo,a,b;..."); os cliques já vão como evento. Grava
+    // sempre na memória, mas só envia em 20% das visitas (sorteio) e em toda
+    // visita que abre o formulário, que leva junto tudo o que veio antes.
+    // Para depois de 10 minutos. Nada do que é digitado entra na gravação.
+    (() => {
+      const LIMITE_MS = 600000;
+      const PARTE_MAXIMA = 12000;
+      const inicio = Date.now();
+      const t0 = performance.now();
+      const tempo = () => Math.round(performance.now() - t0);
+      const alturaDoc = () => document.documentElement.scrollHeight;
+      let enviando = Math.random() < 0.2;
+      let parte = 0;
+      let fila = [];
+      let tamanho = 0;
+      let parada = false;
+      let formAberto = false;
+
+      function despachar(saindo = false) {
+        if (!enviando || !fila.length) return;
+        while (fila.length) {
+          // partes de até 12 mil caracteres (o Worker recusa acima de 24 mil)
+          let n = 0;
+          let soma = 0;
+          while (n < fila.length && soma + fila[n].length < PARTE_MAXIMA) soma += fila[n++].length + 1;
+          const itens = fila.splice(0, Math.max(1, n));
+          const corpo = JSON.stringify({
+            v: visitante, s: sessao, seq: parte++, ini: inicio,
+            w: window.innerWidth, h: window.innerHeight, dh: alturaDoc(), d: itens.join(";"),
+          });
+          if (saindo && navigator.sendBeacon?.("api/gravacao", new Blob([corpo], { type: "text/plain" }))) continue;
+          fetch("api/gravacao", { method: "POST", body: corpo, keepalive: saindo }).catch(() => {});
+        }
+        tamanho = 0;
+      }
+
+      function marcar(...valores) {
+        if (parada) return;
+        const t = tempo();
+        if (t > LIMITE_MS) { parada = true; despachar(); return; }
+        const item = [t, ...valores].join(",");
+        fila.push(item);
+        tamanho += item.length + 1;
+        if (enviando && tamanho > PARTE_MAXIMA) despachar();
+      }
+
+      marcar("i", window.innerWidth, window.innerHeight, alturaDoc());
+      marcar("s", Math.round(window.scrollY));
+
+      let esperaRolagem = 0;
+      let ultimaRolagem = Math.round(window.scrollY);
+      window.addEventListener("scroll", () => {
+        if (esperaRolagem) return;
+        esperaRolagem = setTimeout(() => {
+          esperaRolagem = 0;
+          const y = Math.round(window.scrollY);
+          if (y !== ultimaRolagem) { ultimaRolagem = y; marcar("s", y); }
+        }, 100);
+      }, { passive: true });
+
+      let ultimoMouse = 0;
+      window.addEventListener("pointermove", (e) => {
+        if (e.pointerType !== "mouse") return;
+        const agora = performance.now();
+        if (agora - ultimoMouse < 100) return;
+        ultimoMouse = agora;
+        marcar("m", Math.round(e.pageX - window.innerWidth / 2), Math.round(e.pageY));
+      }, { passive: true });
+
+      window.addEventListener("resize", () => marcar("i", window.innerWidth, window.innerHeight, alturaDoc()));
+
+      // o formulário aberto põe a classe lead-aberto no body (ver abrirLead)
+      new MutationObserver(() => {
+        const aberto = document.body.classList.contains("lead-aberto");
+        if (aberto === formAberto) return;
+        formAberto = aberto;
+        marcar(aberto ? "a" : "f");
+        if (aberto && !enviando) { enviando = true; despachar(); }
+      }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+
+      document.addEventListener("visibilitychange", () => {
+        marcar(document.hidden ? "h" : "v");
+        if (document.hidden) despachar(true);
+      });
+      window.addEventListener("pagehide", () => despachar(true));
+      setInterval(() => despachar(), 10000);
+    })();
+
+    registrar("page_view", { ctx: contexto });
+    enviar();
+    setInterval(lerDataLayer, 1000);
+    medirRolagem();
+
+    return {
+      // chamado depois do envio ao n8n; keepalive mantém o envio vivo durante
+      // a troca de página para o Typeform
+      cadastro({ nome, email, telefone, cta }) {
+        lerDataLayer();
+        enviar();
+        const corpo = JSON.stringify({
+          ...identificacao,
+          ctx: contexto,
+          cadastro: { nome, email, telefone, cta, url: atribuicao.urlCompleta },
+        });
+        fetch("api/cadastro", { method: "POST", body: corpo, keepalive: true }).catch(() => {});
+      },
+    };
+  })();
 
   /* ---------------------------------------------------------
      Título: cada palavra sobe sozinha. Sem JavaScript (ou com movimento
@@ -992,6 +1283,7 @@
     try {
       await enviarLead(dados);
       empurrarEvento(CONFIG.eventoCadastro, { cta: origemCta, lead_origin: CONFIG.identidade.lead_origin });
+      rastreio.cadastro({ ...dados, telefone: celularLocal(dados.telefone), cta: origemCta });
       if (CONFIG.destinoPosCadastro) avisarEIrAoDestino(dados);
       else concluir(dados);
     } catch {
