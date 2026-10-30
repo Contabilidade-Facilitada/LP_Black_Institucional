@@ -264,19 +264,21 @@
     }, { capture: true, passive: true });
 
     // Gravação da visita para a reprodução do painel (aba Gravações): rolagem,
-    // ponteiro do mouse, abertura do formulário e troca de aba, em texto
-    // compacto ("tempo,tipo,a,b;..."); os cliques já vão como evento. Grava
-    // sempre na memória, mas só envia em 20% das visitas (sorteio) e em toda
-    // visita que abre o formulário, que leva junto tudo o que veio antes.
-    // Para depois de 10 minutos. Nada do que é digitado entra na gravação.
+    // ponteiro do mouse, abertura do formulário, troca de aba e o preenchimento
+    // dos campos, em texto compacto ("tempo,tipo,a,b;..."); os cliques já vão
+    // como evento. Grava todas as visitas (AMOSTRA = 1; abaixo de 1, sorteia e
+    // grava também toda visita que abre o formulário, com tudo o que veio
+    // antes). Para depois de 10 minutos.
+    // Do que é digitado, só o tamanho sai do navegador, nunca o conteúdo.
     (() => {
+      const AMOSTRA = 1;
       const LIMITE_MS = 600000;
       const PARTE_MAXIMA = 12000;
       const inicio = Date.now();
       const t0 = performance.now();
       const tempo = () => Math.round(performance.now() - t0);
       const alturaDoc = () => document.documentElement.scrollHeight;
-      let enviando = Math.random() < 0.2;
+      let enviando = Math.random() < AMOSTRA;
       let parte = 0;
       let fila = [];
       let tamanho = 0;
@@ -345,12 +347,34 @@
         if (aberto && !enviando) { enviando = true; despachar(); }
       }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 
+      // Campos do formulário: foco ("o"), tamanho do que foi digitado ("k") e,
+      // ao sair do campo, se ficou com erro ("b", 0 = erro). O conteúdo nunca
+      // entra: o painel mostra o campo enchendo de pontos.
+      const CAMPOS = { "lead-nome": "nome", "lead-email": "email", "lead-telefone": "telefone" };
+      const tamanhos = {};
+      document.addEventListener("focusin", (e) => {
+        const campo = CAMPOS[e.target.id];
+        if (campo) marcar("o", campo);
+      });
+      document.addEventListener("input", (e) => {
+        const campo = CAMPOS[e.target.id];
+        if (!campo) return;
+        const n = e.target.value.length;
+        if (n !== tamanhos[campo]) { tamanhos[campo] = n; marcar("k", campo, n); }
+      });
+      document.addEventListener("focusout", (e) => {
+        const campo = CAMPOS[e.target.id];
+        if (!campo) return;
+        // o erro é posto pelo blur do próprio campo (validarCampo): lê depois dele
+        setTimeout(() => marcar("b", campo, e.target.closest(".campo")?.classList.contains("is-invalido") ? 0 : 1), 0);
+      });
+
       document.addEventListener("visibilitychange", () => {
         marcar(document.hidden ? "h" : "v");
         if (document.hidden) despachar(true);
       });
       window.addEventListener("pagehide", () => despachar(true));
-      setInterval(() => despachar(), 10000);
+      setInterval(() => despachar(), 15000);
     })();
 
     registrar("page_view", { ctx: contexto });

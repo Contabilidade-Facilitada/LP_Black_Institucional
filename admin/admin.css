@@ -894,19 +894,18 @@ body.is-iniciando #ranking, body.is-iniciando #calor { min-height: 180px; }
 
 /* ---------- Mapa de cliques: a LP real em dois aparelhos ---------- */
 .mapa {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
   gap: 24px;
 }
-@media (max-width: 999px) { .mapa { grid-template-columns: minmax(0, 1fr); justify-items: center; } }
-.mapa__lado { margin: 0; min-width: 0; width: 100%; }
-.mapa__lado:last-child { width: auto; }
+@media (max-width: 999px) { .mapa { flex-direction: column; align-items: center; } }
+.mapa__lado { margin: 0; min-width: 0; }
 .mapa__lado figcaption { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; color: var(--apagado); font-size: 12px; }
 .mapa__lado figcaption strong { color: var(--texto); font-size: 13px; font-weight: 600; }
 
 /* moldura de monitor e de celular, só para dar escala */
-.mapa__aparelho { position: relative; border: 1px solid var(--linha-forte); background: #0a0806; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45); }
+.mapa__aparelho { position: relative; width: max-content; border: 1px solid var(--linha-forte); background: #0a0806; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45); }
 .mapa__aparelho--computador { padding: 10px 10px 18px; border-radius: 14px; }
 .mapa__aparelho--computador::after {
   content: "";
@@ -933,7 +932,7 @@ body.is-iniciando #ranking, body.is-iniciando #calor { min-height: 180px; }
   background: var(--fundo);
 }
 .mapa__aviso[hidden] { display: none; }
-.mapa__escala { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 16px; color: var(--apagado); font-size: 11px; }
+.mapa__escala { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-left: auto; color: var(--apagado); font-size: 11px; }
 .mapa__escala:empty { display: none; }
 .mapa__gradiente { width: 160px; height: 10px; border-radius: 4px; }
 .tabela .caminho { display: block; color: var(--apagado); font-size: 11px; font-weight: 400; max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
@@ -1199,8 +1198,8 @@ kbd {
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-areas: "avatar quem nota";
   align-items: center;
-  gap: 14px 18px;
-  padding: 16px 18px;
+  gap: 10px 14px;
+  padding: 10px 14px;
   border: 1px solid hsla(var(--matiz), 80%, 60%, 0.22);
   border-radius: 18px;
   background:
@@ -1222,20 +1221,22 @@ kbd {
 .ficha__avatar { grid-area: avatar; }
 .ficha__nota { grid-area: nota; }
 .ficha__avatar-dentro {
-  width: 60px; height: 60px;
-  font-size: 21px;
+  width: 44px; height: 44px;
+  font-size: 16px;
   box-shadow: 0 10px 30px hsla(var(--matiz), 90%, 50%, 0.45), 0 0 0 4px rgba(255, 255, 255, 0.06);
 }
-.ficha__avatar-dentro .icone svg { width: 26px; height: 26px; }
+.ficha__avatar-dentro .icone svg { width: 20px; height: 20px; }
 .ficha__quem { grid-area: quem; min-width: 0; }
 .ficha__rotulo { color: hsl(var(--matiz), 90%, 72%); font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
-.ficha__quem h2 { margin: 1px 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.ficha__quem h2 { margin: 0; font-size: 18px; line-height: 1.25; font-weight: 700; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .ficha__sub { overflow: hidden; color: var(--texto-2); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.ficha__trilha { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.ficha__trilha { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
 .ficha__trilha-etapa {
-  display: grid;
-  max-width: 220px;
-  padding: 5px 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 240px;
+  padding: 2px 9px;
   border: 1px solid var(--linha-forte);
   border-radius: 10px;
   background: rgba(5, 4, 3, 0.45);
@@ -1245,8 +1246,8 @@ kbd {
 .ficha__trilha-etapa span { color: var(--apagado); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; }
 .ficha__trilha-etapa strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
 .ficha__trilha-seta .icone svg { width: 14px; height: 14px; fill: none; stroke: var(--apagado); stroke-width: 2; }
-.ficha__nota { position: relative; width: 88px; height: 88px; }
-.ficha__nota svg { width: 88px; height: 88px; transform: rotate(-90deg); }
+.ficha__nota { position: relative; width: 62px; height: 62px; }
+.ficha__nota svg { width: 62px; height: 62px; transform: rotate(-90deg); }
 .ficha__anel-fundo { fill: none; stroke: rgba(255, 255, 255, 0.07); stroke-width: 9; }
 .ficha__anel {
   fill: none;
@@ -1257,8 +1258,8 @@ kbd {
   transition: stroke-dashoffset 1.3s var(--curva);
 }
 .ficha__nota-texto { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; }
-.ficha__nota-texto strong { font-size: 26px; font-weight: 700; line-height: 1; }
-.ficha__nota-texto span { color: var(--apagado); font-size: 7px; text-transform: uppercase; letter-spacing: 0.04em; }
+.ficha__nota-texto strong { font-size: 19px; font-weight: 700; line-height: 1; }
+.ficha__nota-texto span { display: none; } /* pequeno demais no anel; a explicação está no title */
 
 /* coluna ao lado do palco: medidas em cima, linha do tempo embaixo */
 .ficha__lado { display: grid; gap: 16px; align-content: start; min-width: 0; }
@@ -1450,7 +1451,7 @@ kbd {
 .estudio__velocidades button[aria-pressed="true"] { background: var(--texto); color: #120c08; }
 
 /* linha do tempo que acompanha a reprodução */
-.ficha__tempo { position: relative; max-height: 64vh; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; scrollbar-color: var(--superficie-3) transparent; }
+.ficha__tempo { position: relative; max-height: 64vh; overflow-y: auto; padding: 4px 6px 4px 8px; scrollbar-width: thin; scrollbar-color: var(--superficie-3) transparent; }
 .ficha__tempo h3 { margin-bottom: 10px; font-size: 13px; font-weight: 600; }
 .linha-tempo { position: relative; margin: 0; padding: 0; list-style: none; }
 .linha-tempo::before,
@@ -1687,14 +1688,8 @@ body.entrar {
   .estudio__ficha { padding: 12px; }
   .ficha__topo { grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px 14px; padding: 16px; }
   .ficha__avatar { grid-area: 1 / 1; }
-  .ficha__nota { grid-area: 1 / 3; justify-self: end; width: 76px; height: 76px; }
-  .ficha__nota svg { width: 76px; height: 76px; }
-  .ficha__nota-texto strong { font-size: 22px; }
-  .ficha__nota-texto span { font-size: 7px; }
+  .ficha__nota { grid-area: 1 / 3; justify-self: end; }
   .ficha__quem { grid-area: 2 / 1 / 3 / 4; }
-  .ficha__quem h2 { font-size: 22px; }
-  .ficha__avatar-dentro { width: 56px; height: 56px; font-size: 20px; }
-  .ficha__avatar-dentro .icone svg { width: 24px; height: 24px; }
 
   /* barras: o complemento do valor desce para a linha de baixo */
   .lista-barras__valor small { display: block; margin: 1px 0 0; text-align: right; }
@@ -1709,6 +1704,40 @@ body.entrar {
   .topo__titulo { font-size: 18px; }
   .topo__titulo span { display: none; }
 }
+
+/* ---------- Mapa: números no cabeçalho do cartão ---------- */
+.mapa__topo { align-items: center; }
+/* rodapé do mapa: números à esquerda, escala de cores à direita */
+.mapa__rodape { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 14px; }
+.mapa__numeros { display: flex; flex-wrap: wrap; gap: 8px; }
+.mapa__numero {
+  display: grid;
+  gap: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  background: rgba(5, 4, 3, 0.35);
+  line-height: 1.2;
+}
+.mapa__numero strong { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mapa__numero > span { color: var(--apagado); font-size: 10.5px; white-space: nowrap; }
+.mapa__numero--computador strong { color: #8fb8ff; }
+.mapa__numero--celular strong { color: var(--laranja-claro); }
+
+/* ---------- Tela cheia (reprodução e mapa) ---------- */
+#ficha:fullscreen,
+#ficha.is-tela-cheia,
+.cartao--mapa:fullscreen,
+.cartao--mapa.is-tela-cheia {
+  overflow: auto;
+  padding: 24px;
+  border-radius: 0;
+  background: radial-gradient(120% 80% at 50% 0%, rgba(255, 153, 51, 0.1) 0%, rgba(255, 153, 51, 0) 60%), var(--fundo);
+}
+.is-tela-cheia { position: fixed !important; inset: 0; z-index: 100; animation: abrir 0.3s var(--curva); }
+.reproducao__cheia { margin-left: auto; }
+.botao--icone .icone svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 1399px) { .reproducao__cheia span, #mapa-tela-cheia span { display: none; } }
 
 /* telas de toque: o aparelho fica de frente (a inclinação segue o mouse) */
 @media (hover: none) {

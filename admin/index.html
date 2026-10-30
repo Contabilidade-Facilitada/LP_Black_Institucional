@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20261030-3">
-  <script src="admin.js?v=20261030-3" defer></script>
+  <link rel="stylesheet" href="admin.css?v=20261030-4">
+  <script src="admin.js?v=20261030-4" defer></script>
 </head>
 <body class="is-iniciando">
   <div class="brilho" aria-hidden="true"></div>
@@ -372,6 +372,7 @@
                     <span class="chave__trilho" aria-hidden="true"></span>
                     Pular pausas
                   </label>
+                  <button class="botao botao--fantasma botao--icone reproducao__cheia" type="button" id="rep-tela-cheia" aria-pressed="false" title="Tela cheia (tecla F)"></button>
                 </div>
               </div>
 
@@ -547,39 +548,21 @@
 
     <!-- ===================== 5. Mapa de cliques ===================== -->
     <section class="painel" id="painel-mapa" role="tabpanel" aria-labelledby="aba-mapa" hidden>
-      <div class="kpis kpis--4">
-        <article class="kpi">
-          <h2 class="kpi__rotulo">Cliques e toques</h2>
-          <p class="kpi__valor" id="m-total">0</p>
-          <p class="kpi__nota">no período e nos filtros escolhidos</p>
-        </article>
-        <article class="kpi">
-          <h2 class="kpi__rotulo">No computador</h2>
-          <p class="kpi__valor" id="m-computador">0</p>
-          <p class="kpi__nota" id="m-computador-nota"></p>
-        </article>
-        <article class="kpi">
-          <h2 class="kpi__rotulo">No celular</h2>
-          <p class="kpi__valor" id="m-celular">0</p>
-          <p class="kpi__nota" id="m-celular-nota"></p>
-        </article>
-        <article class="kpi">
-          <h2 class="kpi__rotulo">Fora da página</h2>
-          <p class="kpi__valor" id="m-fixos">0</p>
-          <p class="kpi__nota">no formulário e na barra fixa, que não aparecem no mapa</p>
-        </article>
-      </div>
-
-      <article class="cartao">
-        <header class="cartao__topo cartao__topo--acoes">
+      <!-- o mapa inteiro (os dois aparelhos) cabe na tela: título e controles
+           numa linha em cima; os números numa faixa embaixo, junto da escala -->
+      <article class="cartao cartao--mapa" id="cartao-mapa">
+        <header class="cartao__topo cartao__topo--acoes mapa__topo">
           <div>
             <h2>Mapa da LP</h2>
             <p>a página real, sem scripts; role dentro de cada aparelho para ver a página inteira</p>
           </div>
-          <div class="segmentos" id="mapa-modos" role="group" aria-label="Tipo de mapa">
-            <button type="button" data-mapa="calor">Calor</button>
-            <button type="button" data-mapa="pontos">Pontos</button>
-            <button type="button" data-mapa="rolagem">Rolagem</button>
+          <div class="controles">
+            <div class="segmentos" id="mapa-modos" role="group" aria-label="Tipo de mapa">
+              <button type="button" data-mapa="calor">Calor</button>
+              <button type="button" data-mapa="pontos">Pontos</button>
+              <button type="button" data-mapa="rolagem">Rolagem</button>
+            </div>
+            <button class="botao botao--fantasma botao--icone" type="button" id="mapa-tela-cheia" aria-pressed="false" title="Tela cheia"></button>
           </div>
         </header>
         <div class="mapa">
@@ -592,7 +575,15 @@
             <div class="mapa__aparelho mapa__aparelho--celular"><div class="mapa__visor" id="visor-celular"></div></div>
           </figure>
         </div>
-        <div class="mapa__escala" id="mapa-escala"></div>
+        <footer class="mapa__rodape">
+          <div class="mapa__numeros">
+            <p class="mapa__numero"><strong id="m-total">0</strong><span>cliques e toques</span></p>
+            <p class="mapa__numero mapa__numero--computador"><strong id="m-computador">0</strong><span>no computador · <span id="m-computador-nota"></span></span></p>
+            <p class="mapa__numero mapa__numero--celular"><strong id="m-celular">0</strong><span>no celular · <span id="m-celular-nota"></span></span></p>
+            <p class="mapa__numero" title="cliques no formulário e na barra fixa, que não aparecem no mapa"><strong id="m-fixos">0</strong><span>fora do mapa</span></p>
+          </div>
+          <div class="mapa__escala" id="mapa-escala"></div>
+        </footer>
       </article>
 
       <div class="grade grade--2">

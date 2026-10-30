@@ -1428,20 +1428,33 @@
     return q;
   }
 
-  // a página fica no tamanho real do aparelho (o layout depende da altura da
-  // tela) e só a imagem é reduzida para caber na coluna
+  // A página fica no tamanho real do aparelho (o layout depende da altura da
+  // tela) e só a imagem é reduzida. Lado a lado, os dois aparelhos cabem
+  // inteiros na tela: a altura é a que sobra abaixo do topo do mapa (com a
+  // página no início, ou na tela cheia) e o computador fica com a largura que
+  // o celular deixa. Em coluna (telas estreitas), cada um cabe sozinho.
+  const MOLDURA_MAPA = 22; // bordas laterais da moldura do aparelho
   function escalarQuadro(q) {
     const { largura, altura } = q.cfg;
     const mapa = q.visor.closest(".mapa");
-    const disponivel = q.cfg === APARELHOS.celular
-      ? mapa.clientWidth - 22
-      : q.visor.closest(".mapa__lado").clientWidth - 22;
-    q.escala = Math.max(0.2, Math.min(1, disponivel / largura));
+    const cartao = $("#cartao-mapa");
+    const cheia = telaCheiaAtiva(cartao);
+    const emColuna = !cheia && window.matchMedia("(max-width: 999px)").matches;
+    const topo = mapa.getBoundingClientRect().top + (cheia ? cartao.scrollTop : window.scrollY);
+    // legenda acima (30), moldura em cima e embaixo (30), rodapé com números e escala e o fim do cartão (96)
+    const alturaLivre = Math.max(280, (emColuna ? window.innerHeight - 140 : window.innerHeight - topo - 156));
+    const escalaCelular = Math.min(1, alturaLivre / APARELHOS.celular.altura, (mapa.clientWidth - MOLDURA_MAPA) / APARELHOS.celular.largura);
+    const larguraLivre = q.cfg === APARELHOS.celular || emColuna
+      ? mapa.clientWidth - MOLDURA_MAPA
+      : mapa.clientWidth - (APARELHOS.celular.largura * escalaCelular + MOLDURA_MAPA) - 24 - MOLDURA_MAPA;
+    q.escala = q.cfg === APARELHOS.celular
+      ? Math.max(0.2, escalaCelular)
+      : Math.max(0.15, Math.min(1, alturaLivre / altura, larguraLivre / largura));
     q.visor.style.width = `${Math.floor(largura * q.escala)}px`;
     q.visor.style.height = `${Math.floor(altura * q.escala)}px`;
     q.iframe.style.transform = `scale(${q.escala})`;
   }
-  window.addEventListener("resize", () => Object.values(quadros).forEach(escalarQuadro));
+  window.addEventListener("resize", () => Object.values(quadros).forEach((q) => { escalarQuadro(q); q.desenho?.(); }));
 
   let versaoMapa = 0;
 
@@ -1767,6 +1780,10 @@
     recarregar: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
     pausa: '<svg viewBox="0 0 24 24"><rect x="6.5" y="5" width="4" height="14" rx="1.2"/><rect x="13.5" y="5" width="4" height="14" rx="1.2"/></svg>',
     relogio: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    teclado: '<svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>',
+    alerta: '<svg viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg>',
+    telaCheia: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+    sairTela: '<svg viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
   };
   // canal de chegada da visita, numa etiqueta com a cor da plataforma
   const CANAIS = [
@@ -2005,14 +2022,14 @@
     const g = {
       inicio: Number.isFinite(base) ? base : partes[0].inicio,
       largura: ordenadas[0].largura, altura: ordenadas[0].altura, alturaDoc: 0,
-      rolagem: [], mouse: [], marcas: [], cargas: [],
+      rolagem: [], mouse: [], marcas: [], cargas: [], campos: [],
     };
     for (const p of ordenadas) {
       const desvio = desvioDe(p);
       if (!g.cargas.includes(desvio)) {
         g.cargas.push(desvio);
         // a página recarregada começa com o formulário fechado
-        if (desvio) g.marcas.push([desvio, "f"]);
+        if (desvio) { g.marcas.push([desvio, "f"]); g.campos.push([desvio, "r"]); }
       }
       g.alturaDoc = Math.max(g.alturaDoc, p.altura_doc || 0);
       for (const item of String(p.dados || "").split(";")) {
@@ -2025,11 +2042,12 @@
           g.largura = Number(a) || g.largura;
           g.altura = Number(b) || g.altura;
           g.alturaDoc = Math.max(g.alturaDoc, Number(c) || 0);
-        } else if (tipo) g.marcas.push([tn, tipo]);
+        } else if (tipo === "o" || tipo === "k" || tipo === "b") g.campos.push([tn, tipo, a, Number(b)]);
+        else if (tipo) g.marcas.push([tn, tipo]);
       }
     }
-    for (const lista of [g.rolagem, g.mouse, g.marcas]) lista.sort((x, y) => x[0] - y[0]);
-    g.duracao = Math.max(0, ...g.rolagem.map((x) => x[0]), ...g.mouse.map((x) => x[0]), ...g.marcas.map((x) => x[0]));
+    for (const lista of [g.rolagem, g.mouse, g.marcas, g.campos]) lista.sort((x, y) => x[0] - y[0]);
+    g.duracao = Math.max(0, ...[g.rolagem, g.mouse, g.marcas, g.campos].flat().map((x) => x[0]));
     return g;
   }
 
@@ -2175,7 +2193,11 @@
     cadastro: { icone: "estrela", cor: CORES.cadastros },
     rolagem: { icone: "rolagem", cor: CORES.anterior },
     recarga: { icone: "recarregar", cor: "#8fb8ff" },
+    digitacao: { icone: "teclado", cor: "#c9a2ff" },
+    "erro-campo": { icone: "alerta", cor: "#ff8a7a" },
   };
+  // nome do campo com o artigo e as contrações: [o, no, pelo]
+  const NOMES_CAMPOS = { nome: ["o nome", "no nome", "pelo nome"], email: ["o e-mail", "no e-mail", "pelo e-mail"], telefone: ["o WhatsApp", "no WhatsApp", "pelo WhatsApp"] };
 
   function prepararReproducao({ pv, eventos, cadastro, partes, tocar }) {
     const g = lerGravacao(partes);
@@ -2201,6 +2223,20 @@
       else if (e.evento === "gtm.scrollDepth") itens.push({ t, rotulo: `Rolou ${e.detalhe}% da página`, sub: "", tipo: "rolagem" });
       else if (e.evento === "page_view" && e.id !== pv.id) itens.push({ t, rotulo: "Recarregou a página", sub: "mesma aba, carregamento novo", tipo: "recarga" });
     }
+    // campos do formulário: um item ao sair de cada campo, com o tamanho do
+    // que foi digitado (o conteúdo não é gravado) ou o aviso de erro
+    const tamanhos = {};
+    for (const [ct, tipo, campo, n] of g?.campos || []) {
+      if (tipo === "r") { for (const k in tamanhos) delete tamanhos[k]; continue; }
+      if (tipo === "k") { tamanhos[campo] = n; continue; }
+      if (tipo !== "b" || !NOMES_CAMPOS[campo]) continue;
+      const tam = tamanhos[campo] || 0;
+      itens.push(n === 0
+        ? { t: ct, rotulo: `Erro ${NOMES_CAMPOS[campo][1]}`, sub: tam ? `${plural(tam, "caractere", "caracteres")}; corrigir para enviar` : "deixou em branco", tipo: "erro-campo" }
+        : tam
+          ? { t: ct, rotulo: `Preencheu ${NOMES_CAMPOS[campo][0]}`, sub: plural(tam, "caractere", "caracteres"), tipo: "digitacao" }
+          : { t: ct, rotulo: `Passou ${NOMES_CAMPOS[campo][2]}`, sub: "sem digitar", tipo: "digitacao" });
+    }
     // o envio (dataLayer) e a cópia gravada no banco são o mesmo cadastro: um item só
     if (cadastro) {
       const tc = cadastro.ts - inicio;
@@ -2223,7 +2259,7 @@
       if (saiu !== null) rep.foraDaAba.push([saiu, g.duracao]);
     }
     rep.atividade = [...new Set([
-      ...(g ? [...g.rolagem, ...g.mouse, ...g.marcas].map((x) => x[0]) : []),
+      ...(g ? [...g.rolagem, ...g.mouse, ...g.marcas, ...g.campos].map((x) => x[0]) : []),
       ...rep.cliques.map((x) => x.t),
       ...itens.map((x) => x.t),
     ])].sort((a, b) => a - b);
@@ -2265,28 +2301,8 @@
     const visor = $("#rep-visor");
     const iframe = el("iframe", { src: DEMO ? "../index.html?mapa=1" : "../?mapa=1", sandbox: "allow-same-origin", title: "Reprodução da visita", width: largura, height: altura });
     visor.replaceChildren(iframe);
-    const palco = $(".ficha__palco");
-    const disponivel = Math.max(200, palco.clientWidth - (computador ? 28 : 24));
-    // lado a lado com a lista, a ficha tem altura fixa: o aparelho usa o que
-    // sobra abaixo do cabeçalho, medidos os controles (que podem quebrar em
-    // duas linhas), o aviso, a moldura, a luz do chão e os espaços; em coluna,
-    // a página rola e vale uma fração da tela
-    const emColuna = window.matchMedia("(max-width: 1099px)").matches;
-    const aviso = $("#rep-aviso");
-    const reservado = 40 + 16 + 12 + 26 + (computador ? 34 : 28) + 16
-      + $("#rep-controles").offsetHeight + (aviso.hidden ? 0 : aviso.offsetHeight + 12);
-    const livre = emColuna
-      ? window.innerHeight * (computador ? 0.5 : 0.62)
-      : Math.max(240, $("#est-ficha").clientHeight - $(".ficha__topo").offsetHeight - reservado);
-    const escala = Math.min(1, disponivel / largura, livre / altura);
-    visor.style.width = `${Math.floor(largura * escala)}px`;
-    visor.style.height = `${Math.floor(altura * escala)}px`;
-    // a coluna ao lado (medidas + linha do tempo) vai até a altura do palco já
-    // desenhado; a linha do tempo rola por dentro
-    $(".ficha__tempo").style.maxHeight = emColuna ? ""
-      : `${Math.max(160, palco.offsetHeight - $("#f-metricas").offsetHeight - 16)}px`;
-    iframe.style.transform = `scale(${escala})`;
-    Object.assign(rep, { iframe, largura, altura, escala, doc: null });
+    Object.assign(rep, { iframe, largura, altura, computador, escala: 1, doc: null });
+    dimensionarReproducao();
 
     iframe.addEventListener("load", () => {
       let doc = null;
@@ -2320,6 +2336,72 @@
       if (tocar && g) alternarReproducao();
     }, { once: true });
   }
+
+  // Tamanho do aparelho. Lado a lado com a lista (ou em tela cheia), a ficha
+  // tem altura fixa: o aparelho usa o que sobra abaixo do cabeçalho, medidos
+  // os controles (que podem quebrar em duas linhas), o aviso, a moldura, a luz
+  // do chão e os espaços. Em coluna, a página rola e vale uma fração da tela.
+  function dimensionarReproducao() {
+    const { iframe, largura, altura, computador } = rep;
+    if (!iframe) return;
+    const ficha = $("#ficha");
+    const cheia = telaCheiaAtiva(ficha);
+    const palco = $(".ficha__palco");
+    const disponivel = Math.max(200, palco.clientWidth - (computador ? 28 : 24));
+    const emColuna = !cheia && window.matchMedia("(max-width: 1099px)").matches;
+    const aviso = $("#rep-aviso");
+    const reservado = (cheia ? 48 : 40) + 16 + 12 + 26 + (computador ? 34 : 28) + 16
+      + $("#rep-controles").offsetHeight + (aviso.hidden ? 0 : aviso.offsetHeight + 12);
+    const caixa = cheia ? ficha : $("#est-ficha");
+    const livre = emColuna
+      ? window.innerHeight * (computador ? 0.5 : 0.62)
+      : Math.max(240, caixa.clientHeight - $(".ficha__topo").offsetHeight - reservado);
+    const escala = Math.min(cheia ? 2 : 1, disponivel / largura, livre / altura);
+    const visor = $("#rep-visor");
+    visor.style.width = `${Math.floor(largura * escala)}px`;
+    visor.style.height = `${Math.floor(altura * escala)}px`;
+    iframe.style.transform = `scale(${escala})`;
+    rep.escala = escala;
+    // a coluna ao lado (medidas + linha do tempo) vai até a altura do palco já
+    // desenhado; a linha do tempo rola por dentro
+    $(".ficha__tempo").style.maxHeight = emColuna ? ""
+      : `${Math.max(160, palco.offsetHeight - $("#f-metricas").offsetHeight - 16)}px`;
+  }
+
+  /* Tela cheia (reprodução e mapa de cliques). Onde o navegador não deixa um
+     bloco qualquer ocupar a tela (iPhone), a classe is-tela-cheia faz o mesmo
+     com position: fixed. */
+  const telaCheiaAtiva = (n) => document.fullscreenElement === n || n.classList.contains("is-tela-cheia");
+  async function alternarTelaCheia(n) {
+    if (telaCheiaAtiva(n)) {
+      if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+      n.classList.remove("is-tela-cheia");
+    } else if (document.fullscreenEnabled && n.requestFullscreen) {
+      await n.requestFullscreen().catch(() => n.classList.add("is-tela-cheia"));
+    } else {
+      n.classList.add("is-tela-cheia");
+    }
+    depoisDaTelaCheia();
+  }
+  function depoisDaTelaCheia() {
+    for (const [botao, alvo] of [["#rep-tela-cheia", "#ficha"], ["#mapa-tela-cheia", "#cartao-mapa"]]) {
+      const ativa = telaCheiaAtiva($(alvo));
+      $(botao).replaceChildren(icone(ativa ? "sairTela" : "telaCheia"), el("span", {}, ativa ? "Sair da tela cheia" : "Tela cheia"));
+      $(botao).setAttribute("aria-pressed", String(ativa));
+    }
+    // espera o navegador assentar o novo tamanho
+    requestAnimationFrame(() => {
+      dimensionarReproducao();
+      Object.values(quadros).forEach((q) => { escalarQuadro(q); q.desenho?.(); });
+    });
+  }
+  document.addEventListener("fullscreenchange", depoisDaTelaCheia);
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    const aberta = $(".is-tela-cheia");
+    if (aberta) { aberta.classList.remove("is-tela-cheia"); depoisDaTelaCheia(); }
+  });
+  window.addEventListener("resize", () => dimensionarReproducao());
 
   function desenharReproducao() {
     const t = rep.t;
@@ -2377,6 +2459,32 @@
       aberto = rep.formulario.some((ft) => ft <= t);
     }
     doc.getElementById("lead")?.classList.toggle("is-aberto", aberto);
+
+    // campos: pontos no lugar do que foi digitado (só o tamanho é gravado),
+    // destaque no campo em foco e o aviso de erro de quando a pessoa saiu dele
+    if (g?.campos.length) {
+      const estado = {};
+      let foco = null;
+      for (const [ct, tipo, campo, n] of g.campos) {
+        if (ct > t) break;
+        if (tipo === "r") { for (const k in estado) delete estado[k]; foco = null; continue; }
+        const s = (estado[campo] ||= { n: 0, erro: false });
+        if (tipo === "k") s.n = n;
+        else if (tipo === "o") foco = campo;
+        else if (tipo === "b") { s.erro = n === 0; if (foco === campo) foco = null; }
+      }
+      for (const campo of Object.keys(NOMES_CAMPOS)) {
+        const input = doc.getElementById(`lead-${campo}`);
+        if (!input) continue;
+        const s = estado[campo] || { n: 0, erro: false };
+        const valor = "•".repeat(Math.min(s.n, 80));
+        if (input.value !== valor) input.value = valor;
+        input.closest(".campo")?.classList.toggle("is-invalido", s.erro);
+        input.style.outline = foco === campo ? "2px solid #ff9933" : "";
+        input.style.outlineOffset = foco === campo ? "2px" : "";
+        input.style.boxShadow = foco === campo ? "0 0 0 6px rgba(255,153,51,.18)" : "";
+      }
+    }
 
     // cursor e rastro
     if (g?.mouse.length) {
@@ -2454,6 +2562,9 @@
   marcarVelocidade();
 
   $("#rep-tocar").addEventListener("click", alternarReproducao);
+  $("#rep-tela-cheia").addEventListener("click", () => alternarTelaCheia($("#ficha")));
+  $("#mapa-tela-cheia").addEventListener("click", () => alternarTelaCheia($("#cartao-mapa")));
+  depoisDaTelaCheia();
   $("#rep-barra").addEventListener("input", (e) => { rep.t = Number(e.target.value); desenharReproducao(); });
 
   // Aparelho em perspectiva: inclina na direção do mouse e endireita quando
@@ -2519,6 +2630,7 @@
     if (prefs.aba !== "pessoas" || e.target.closest("input, textarea, select") || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); moverSelecao(e.key === "ArrowDown" ? 1 : -1); }
     else if (e.key === " " && !e.target.closest("button")) { e.preventDefault(); alternarReproducao(); }
+    else if ((e.key === "f" || e.key === "F") && !$("#ficha").hidden) { e.preventDefault(); alternarTelaCheia($("#ficha")); }
     else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
       e.preventDefault();
       rep.t = Math.min(rep.duracao, Math.max(0, rep.t + (e.key === "ArrowRight" ? 5000 : -5000)));
