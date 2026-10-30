@@ -12,19 +12,19 @@
    * chaves "Nome:", "E-mail:" e "Celular:" com os dois-pontos, celular só com
    * dígitos e sem o 55.
    *
-   * A CONFIRMAR: event_name, lead_origin e lead_product_interest desta
-   * página. Os valores abaixo seguem o padrão da Esquenta Black.
+   * event_name, lead_origin e lead_product_interest vão iguais para o n8n
+   * e para o Typeform; "_frios" separa esta página da Esquenta Black.
    */
   const CONFIG = {
     webhook: "https://n8n.srv1420397.hstgr.cloud/webhook/elementor-wtl",
     identidade: {
       event_name: "black_november_2026",
-      lead_origin: "lp_black_pf_2026",
+      lead_origin: "lp_black_november_2026_frios",
       lead_product_interest: "institucional",
     },
     // mesmo Typeform da Esquenta Black: o visitante vai para lá depois do
-    // cadastro, com as UTMs, a identidade e os dados como campos ocultos
-    // (depois do "#"). Vazio, a confirmação aparece na própria gaveta
+    // cadastro (endereço montado em urlPosCadastro). Vazio, a confirmação
+    // aparece na própria gaveta
     destinoPosCadastro: "https://3rng23rvpr3.typeform.com/black-2026",
     formId: "black_pf_2026",
     formNome: "Lista VIP - Black PF 2026",
@@ -651,31 +651,6 @@
   $$("[data-cta-bloco]").forEach((el) => observadorBotoes.observe(el));
 
   /* ---------------------------------------------------------
-     Dock do celular: o rótulo diz em que dobra a pessoa está (a que cruza
-     o meio da tela). No computador o rótulo fica fixo.
-     --------------------------------------------------------- */
-  (() => {
-    const rotulo = $(".dock__rotulo", dock);
-    const padrao = rotulo.textContent;
-    let capitulo = padrao;
-
-    function escrever(texto) {
-      if (rotulo.textContent === texto) return;
-      rotulo.textContent = texto;
-      rotulo.classList.remove("is-trocando");
-      void rotulo.offsetWidth;
-      rotulo.classList.add("is-trocando");
-    }
-
-    const observadorCapitulo = new IntersectionObserver((entradas) => {
-      entradas.forEach((e) => { if (e.isIntersecting) capitulo = e.target.dataset.capitulo; });
-      if (telaCelular.matches) escrever(capitulo);
-    }, { rootMargin: "-50% 0px -50% 0px" });
-    $$("[data-capitulo]").forEach((el) => observadorCapitulo.observe(el));
-    telaCelular.addEventListener?.("change", () => escrever(telaCelular.matches ? capitulo : padrao));
-  })();
-
-  /* ---------------------------------------------------------
      Voltar ao topo: aparece depois da primeira tela; o anel em volta
      mostra quanto da página já foi lido. No celular sobe para ficar acima
      do dock quando ele aparece (CSS).
@@ -1028,21 +1003,25 @@
     }
   });
 
-  // destino com os campos ocultos (padrão do Typeform, depois do "#"): as
-  // UTMs da sessão (vazia não vai), a identidade e os dados do cadastro;
-  // phone só com dígitos e com o 55 na frente
+  // endereço no formato combinado com o Typeform: as 5 UTMs da sessão na
+  // query (vazias também vão) e, depois do "#", os campos ocultos com os
+  // dados do cadastro e a identidade; phone só com dígitos e com o 55 na
+  // frente (5511999990000)
+  // (encodeURIComponent e não URLSearchParams: espaço vira %20, não "+")
   function urlPosCadastro({ nome, email, telefone }) {
-    const ocultos = {};
-    CHAVES_UTM.forEach((c) => { if (atribuicao[c]) ocultos[c] = atribuicao[c]; });
-    Object.assign(ocultos, CONFIG.identidade, {
-      name: nome,
-      email,
-      phone: `55${celularLocal(telefone)}`,
-    });
-    const hash = Object.entries(ocultos)
-      .map(([c, v]) => `${c}=${encodeURIComponent(v)}`)
-      .join("&");
-    return `${CONFIG.destinoPosCadastro}#${hash}`;
+    const juntar = (pares) => pares.map(([c, v]) => `${c}=${encodeURIComponent(v)}`).join("&");
+    const query = juntar(
+      ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"].map((c) => [c, atribuicao[c]])
+    );
+    const hash = juntar([
+      ["name", nome],
+      ["phone", `55${celularLocal(telefone)}`],
+      ["email", email],
+      ["lead_product_interest", CONFIG.identidade.lead_product_interest],
+      ["event_name", CONFIG.identidade.event_name],
+      ["lead_origin", CONFIG.identidade.lead_origin],
+    ]);
+    return `${CONFIG.destinoPosCadastro}?${query}#${hash}`;
   }
 
   // voltou do destino pelo "voltar" do navegador (página restaurada do
