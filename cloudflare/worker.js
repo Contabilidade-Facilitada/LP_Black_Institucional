@@ -10,6 +10,7 @@
  *   POST /api/coleta     acessos e eventos do dataLayer (público)
  *   POST /api/cadastro   cópia de cada cadastro da Lista VIP (público)
  *   POST /api/gravacao   partes da gravação de uma visita (público)
+ *   GET  /api/metricas-gateway agregado sem dados pessoais (token)
  *   GET  /admin/         painel (exige login)
  *   GET  /admin/api/sync dados do painel (idem)
  *   GET  /admin/entrar   tela de login (e-mail e senha)
@@ -30,6 +31,10 @@
  *   ADMIN_SENHA  senha do painel
  *   ADMIN_CHAVE  texto aleatório longo, que assina a sessão; trocar este
  *                valor (ou a senha) desconecta todo mundo
+ *   GATEWAY_METRICAS_CHAVE  texto aleatório longo, exclusivo da leitura do
+ *                agregado pelo Data Gateway (o mesmo valor fica lá, em
+ *                BLACK_LP_INSTITUCIONAL_METRICAS_CHAVE). Diferente dos de login
+ *                e do usado pela Esquenta Black
  *
  * O e-mail e a senha ficam só nos segredos, nunca neste arquivo. Sem algum
  * segredo ou sem o banco, o painel responde 503 (falha fechada), nunca aberto.
@@ -64,13 +69,17 @@ export default {
       return receberGravacao(request, env, url);
     }
 
+    if (caminho === "/api/metricas-gateway") {
+      return metricasGateway(request, env);
+    }
+
     if (caminho.startsWith("/admin/")) {
       return painel(request, env, url, caminho);
     }
 
     // configuração do Worker e do deploy não sai por este domínio (o
     // .assetsignore já deixa esses arquivos de fora; isto é a segunda trava)
-    if (/^\/(cloudflare|\.git|\.wrangler|node_modules)(\/|$)|^\/(\.gitignore|\.assetsignore|wrangler\.jsonc?)$/.test(caminho)) {
+    if (/^\/(cloudflare|tests|\.git|\.wrangler|node_modules)(\/|$)|^\/(\.gitignore|\.assetsignore|wrangler\.jsonc?)$/.test(caminho)) {
       return resposta(404);
     }
 
@@ -288,6 +297,74 @@ function inserirVarias(db, tabela, linhas) {
       .prepare(`INSERT INTO ${tabela} (${colunas.join(",")}) VALUES (${colunas.map(() => "?").join(",")})`)
       .bind(...colunas.map((c) => linha[c] ?? null));
   }));
+}
+
+/* ---------------------------------------------------------------------------
+   Agregado para o Data Gateway (recurso black_lp_institucional_funil_diario,
+   que o BI lê). Mesmo formato da rota da Esquenta Black: por dia de Brasília ×
+   UTMs × dispositivo, sem nome, e-mail, telefone, visitante ou sessão. A
+   coluna "cor" vem sempre nula (esta página não tem teste A/B) para o
+   contrato ser o mesmo nos dois lados. Percorre as tabelas inteiras; o teto
+   de 10 mil linhas de /admin/api/sync não participa desta leitura.
+   --------------------------------------------------------------------------- */
+
+const SQL_METRICAS_GATEWAY = `
+WITH primeira_pagina AS (
+  SELECT sessao, MIN(id) AS id
+  FROM eventos_pf
+  WHERE evento = 'page_view' AND sessao IS NOT NULL
+  GROUP BY sessao
+), contexto_sessao AS (
+  SELECT p.sessao, e.utm_source, e.utm_medium, e.utm_campaign, e.dispositivo
+  FROM primeira_pagina p JOIN eventos_pf e ON e.id = p.id
+), fatos AS (
+  SELECT date(e.ts / 1000, 'unixepoch', '-3 hours') AS dia,
+         e.utm_source, e.utm_medium, e.utm_campaign, e.dispositivo,
+         e.visitante, 'acesso' AS tipo
+  FROM eventos_pf e WHERE e.evento = 'page_view'
+  UNION ALL
+  SELECT date(e.ts / 1000, 'unixepoch', '-3 hours'),
+         s.utm_source, s.utm_medium, s.utm_campaign, s.dispositivo,
+         e.visitante, 'abertura'
+  FROM eventos_pf e LEFT JOIN contexto_sessao s ON s.sessao = e.sessao
+  WHERE e.evento = 'lead_form_aberto'
+  UNION ALL
+  SELECT date(c.ts / 1000, 'unixepoch', '-3 hours'),
+         c.utm_source, c.utm_medium, c.utm_campaign, c.dispositivo,
+         c.visitante, 'cadastro'
+  FROM cadastros_pf c
+)
+SELECT dia, NULL AS cor, utm_source, utm_medium, utm_campaign, dispositivo,
+       SUM(CASE WHEN tipo = 'acesso' THEN 1 ELSE 0 END) AS acessos,
+       COUNT(DISTINCT CASE WHEN tipo = 'acesso' THEN visitante END) AS visitantes_unicos,
+       COUNT(DISTINCT CASE WHEN tipo = 'abertura' THEN visitante END) AS formularios_abertos,
+       SUM(CASE WHEN tipo = 'cadastro' THEN 1 ELSE 0 END) AS cadastros
+FROM fatos
+GROUP BY dia, utm_source, utm_medium, utm_campaign, dispositivo
+ORDER BY dia, utm_source, utm_medium, utm_campaign, dispositivo`;
+
+const SQL_TOTAIS_GATEWAY = `
+SELECT
+  (SELECT COUNT(*) FROM eventos_pf WHERE evento = 'page_view') AS acessos,
+  (SELECT COUNT(DISTINCT visitante) FROM eventos_pf WHERE evento = 'page_view') AS visitantes_unicos,
+  (SELECT COUNT(DISTINCT visitante) FROM eventos_pf WHERE evento = 'lead_form_aberto') AS formularios_abertos,
+  (SELECT COUNT(*) FROM cadastros_pf) AS cadastros`;
+
+// sem algum segredo ou sem o banco, 503 (falha fechada); token errado, 401
+async function metricasGateway(request, env) {
+  if (request.method !== "GET") return protegido(resposta(405));
+  if (!env.DB || !env.ADMIN_CHAVE || !env.GATEWAY_METRICAS_CHAVE) return protegido(resposta(503));
+  const autorizacao = request.headers.get("Authorization") || "";
+  const token = autorizacao.startsWith("Bearer ") ? autorizacao.slice(7) : "";
+  if (!(await iguais(env, token, env.GATEWAY_METRICAS_CHAVE))) {
+    return protegido(resposta(401));
+  }
+
+  const [linhas, totais] = await Promise.all([
+    env.DB.prepare(SQL_METRICAS_GATEWAY).all(),
+    env.DB.prepare(SQL_TOTAIS_GATEWAY).first(),
+  ]);
+  return protegido(json({ agora: Date.now(), completo: true, totais, linhas: linhas.results }));
 }
 
 /* ---------------------------------------------------------------------------

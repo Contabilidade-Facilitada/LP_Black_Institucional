@@ -5,6 +5,7 @@
 .wrangler
 node_modules
 cloudflare
+tests
 wrangler.jsonc
 .dev.vars
 .assetsignore
