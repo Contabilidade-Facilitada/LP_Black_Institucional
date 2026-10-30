@@ -17,6 +17,9 @@
    */
   const CONFIG = {
     webhook: "https://n8n.srv1420397.hstgr.cloud/webhook/elementor-wtl",
+    // cópia do mesmo corpo direto no Data Gateway (função lead-lp), para o lead
+    // não depender só do n8n; aceita só a origem blacknovember.contabilidadefacilitada.com
+    dataGateway: "https://hhxuiastzielrhiobegv.supabase.co/functions/v1/lead-lp",
     identidade: {
       event_name: "black_november_2026",
       lead_origin: "lp_black_november_2026_frios",
@@ -1221,6 +1224,17 @@
     return d.startsWith("55") && d.length > 11 ? d.slice(2) : d;
   }
 
+  // Independente do envio ao n8n: um caminho fora do ar não leva o outro junto.
+  // sendBeacon sobrevive à troca de página para o Typeform; nunca lança erro.
+  function enviarDataGateway(corpo) {
+    try {
+      if (navigator.sendBeacon?.(CONFIG.dataGateway, corpo)) return;
+      fetch(CONFIG.dataGateway, { method: "POST", mode: "no-cors", body: corpo, keepalive: true }).catch(() => {});
+    } catch {
+      /* a cópia é extra; o cadastro segue pelo n8n */
+    }
+  }
+
   async function enviarLead({ nome, email, telefone }) {
     const corpo = new URLSearchParams({
       "Nome:": nome,
@@ -1237,6 +1251,8 @@
       form_name: CONFIG.formNome,
       cta_origem: origemCta,
     });
+
+    enviarDataGateway(corpo);
 
     const controle = new AbortController();
     const limite = setTimeout(() => controle.abort(), CONFIG.tempoLimiteEnvioMs);
