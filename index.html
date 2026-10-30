@@ -26,7 +26,7 @@
 
   <link rel="preload" as="image" href="assets/img/gabriel-rabelo-600.webp" type="image/webp" media="(max-width: 959px)">
   <link rel="preload" as="image" href="assets/img/gabriel-rabelo-900.webp" type="image/webp" media="(min-width: 960px)">
-  <link rel="stylesheet" href="assets/css/style.css?v=20261030-2">
+  <link rel="stylesheet" href="assets/css/style.css?v=20261030-3">
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
@@ -760,13 +760,29 @@
           </form>
         </div>
 
+        <!-- Etapa: aviso antes do Typeform (contagem montada em main.js) -->
+        <div class="lead__etapa lead__etapa--sucesso" data-etapa="aviso" hidden>
+          <div class="sucesso__marca" aria-hidden="true">
+            <svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="36"/><path d="M24 41 35 52 57 29"/></svg>
+          </div>
+          <h2 class="lead__titulo" tabindex="-1">Cadastro <span class="destaque">confirmado!</span></h2>
+          <p class="lead__subtitulo"><span data-lead-nome>Seu lugar está garantido.</span> Para concluir, vamos abrir algumas perguntas rápidas.</p>
+          <p class="aviso__contagem">Abrindo em <strong id="lead-contagem">4</strong> <span id="lead-contagem-unidade">segundos</span>…</p>
+          <span class="aviso__barra" aria-hidden="true"><span></span></span>
+          <a class="botao botao--primario botao--bloco" id="lead-ir-agora" href="#">
+            <span class="botao__brilho" aria-hidden="true"></span>
+            <span class="botao__texto">Responder agora</span>
+            <svg class="icone"><use href="#i-seta"/></svg>
+          </a>
+        </div>
+
         <!-- Etapa: confirmação -->
         <div class="lead__etapa lead__etapa--sucesso" data-etapa="sucesso" hidden>
           <div class="sucesso__marca" aria-hidden="true">
             <svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="36"/><path d="M24 41 35 52 57 29"/></svg>
           </div>
-          <h2 class="lead__titulo" tabindex="-1" id="lead-sucesso-titulo">Você está na <span class="destaque">lista da Black!</span></h2>
-          <p class="lead__subtitulo"><span id="lead-sucesso-nome">Seu lugar está garantido.</span> Vamos avisar você em primeira mão quando as condições forem liberadas.</p>
+          <h2 class="lead__titulo" tabindex="-1">Você está na <span class="destaque">lista da Black!</span></h2>
+          <p class="lead__subtitulo"><span data-lead-nome>Seu lugar está garantido.</span> Vamos avisar você em primeira mão quando as condições forem liberadas.</p>
           <button class="botao botao--primario botao--bloco" type="button" data-fechar-lead>
             <span class="botao__brilho" aria-hidden="true"></span>
             <span class="botao__texto">Voltar para a página</span>
@@ -777,6 +793,6 @@
     </div>
   </div>
 
-  <script src="assets/js/main.js?v=20261030-3" defer></script>
+  <script src="assets/js/main.js?v=20261030-4" defer></script>
 </body>
 </html>

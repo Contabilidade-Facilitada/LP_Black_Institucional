@@ -26,6 +26,8 @@
     // cadastro (endereço montado em urlPosCadastro). Vazio, a confirmação
     // aparece na própria gaveta
     destinoPosCadastro: "https://3rng23rvpr3.typeform.com/black-2026",
+    // segundos de aviso na gaveta antes de abrir o destino
+    esperaDestinoS: 4,
     formId: "black_pf_2026",
     formNome: "Lista VIP - Black PF 2026",
     // mesmo evento de conversão da Esquenta Black, para os gatilhos do GTM
@@ -702,9 +704,13 @@
   const form = $("#form-lead");
   const etapaForm = $('[data-etapa="form"]', lead);
   const etapaSucesso = $('[data-etapa="sucesso"]', lead);
+  const etapaAviso = $('[data-etapa="aviso"]', lead);
+  const etapas = { form: etapaForm, sucesso: etapaSucesso, aviso: etapaAviso };
   const botaoEnviar = $("#lead-enviar");
   const falha = $("#lead-falha");
   const CHAVE_LEAD = "cf_black_pf_lead";
+  // intervalo da contagem do aviso até o destino (null fora dela)
+  let contagemDestino = null;
   let origemCta = "";
   let focoAnterior = null;
   let historicoEmpilhado = false;
@@ -724,8 +730,10 @@
     origemCta = origem || "desconhecido";
     focoAnterior = document.activeElement;
 
-    const anterior = armazenamento.ler(CHAVE_LEAD);
-    mostrarEtapa(anterior ? "sucesso" : "form", anterior);
+    // sempre o formulário, mesmo para quem já se cadastrou: cada envio
+    // termina no destino (Typeform), com os dados da vez. Durante a contagem
+    // para o destino, a gaveta reabre no aviso
+    if (!contagemDestino) mostrarEtapa("form");
 
     lead.inert = false;
     lead.classList.add("is-aberto");
@@ -981,26 +989,55 @@
 
     botaoEnviar.classList.add("is-carregando");
     botaoEnviar.setAttribute("aria-busy", "true");
-    let redirecionando = false;
     try {
       await enviarLead(dados);
       empurrarEvento(CONFIG.eventoCadastro, { cta: origemCta, lead_origin: CONFIG.identidade.lead_origin });
-      if (CONFIG.destinoPosCadastro) {
-        armazenamento.gravar(CHAVE_LEAD, { nome: dados.nome, em: new Date().toISOString() });
-        // o botão segue "carregando" até a troca de página
-        redirecionando = true;
-        location.assign(urlPosCadastro(dados));
-      } else {
-        concluir(dados);
-      }
+      if (CONFIG.destinoPosCadastro) avisarEIrAoDestino(dados);
+      else concluir(dados);
     } catch {
       falha.textContent = "Não conseguimos enviar agora. Confira sua conexão e tente de novo.";
     } finally {
-      if (!redirecionando) {
-        botaoEnviar.classList.remove("is-carregando");
-        botaoEnviar.removeAttribute("aria-busy");
-      }
+      botaoEnviar.classList.remove("is-carregando");
+      botaoEnviar.removeAttribute("aria-busy");
     }
+  });
+
+  // aviso na gaveta com contagem regressiva e, no fim, o destino. Fechar a
+  // gaveta não cancela; "Responder agora" adianta
+  function avisarEIrAoDestino(dados) {
+    const url = urlPosCadastro(dados);
+    const registro = { nome: dados.nome, em: new Date().toISOString() };
+    armazenamento.gravar(CHAVE_LEAD, registro);
+
+    const contagem = $("#lead-contagem");
+    const unidade = $("#lead-contagem-unidade");
+    let restante = CONFIG.esperaDestinoS;
+    const escreverRestante = () => {
+      contagem.textContent = restante;
+      unidade.textContent = restante === 1 ? "segundo" : "segundos";
+    };
+    escreverRestante();
+    etapaAviso.style.setProperty("--espera", `${CONFIG.esperaDestinoS}s`);
+    $("#lead-ir-agora").href = url;
+    mostrarEtapa("aviso", registro);
+    comemorar(etapaAviso);
+
+    clearInterval(contagemDestino);
+    contagemDestino = setInterval(() => {
+      restante -= 1;
+      if (restante > 0) {
+        escreverRestante();
+        return;
+      }
+      clearInterval(contagemDestino);
+      contagemDestino = null;
+      location.assign(url);
+    }, 1000);
+  }
+
+  $("#lead-ir-agora").addEventListener("click", () => {
+    clearInterval(contagemDestino);
+    contagemDestino = null;
   });
 
   // endereço no formato combinado com o Typeform: as 5 UTMs da sessão na
@@ -1028,6 +1065,8 @@
   // cache): solta o botão e mostra a confirmação em vez do formulário
   window.addEventListener("pageshow", (e) => {
     if (!e.persisted) return;
+    clearInterval(contagemDestino);
+    contagemDestino = null;
     botaoEnviar.classList.remove("is-carregando");
     botaoEnviar.removeAttribute("aria-busy");
     const registro = armazenamento.ler(CHAVE_LEAD);
@@ -1038,9 +1077,12 @@
     const registro = { nome: dados.nome, em: new Date().toISOString() };
     armazenamento.gravar(CHAVE_LEAD, registro);
     mostrarEtapa("sucesso", registro);
-    navigator.vibrate?.(35);
+    comemorar(etapaSucesso);
+  }
 
-    const marca = $(".sucesso__marca", lead);
+  function comemorar(etapa) {
+    navigator.vibrate?.(35);
+    const marca = $(".sucesso__marca", etapa);
     requestAnimationFrame(() => {
       const r = marca.getBoundingClientRect();
       brasas?.explodir(r.left + r.width / 2, r.top + r.height / 2);
@@ -1048,23 +1090,22 @@
   }
 
   function mostrarEtapa(qual, registro) {
-    const sucesso = qual === "sucesso";
-    etapaForm.hidden = sucesso;
-    etapaSucesso.hidden = !sucesso;
-    if (!sucesso) return;
+    Object.entries(etapas).forEach(([nome, el]) => { el.hidden = nome !== qual; });
+    if (qual === "form") return;
+    const etapa = etapas[qual];
     const primeiroNome = (registro?.nome || "").split(" ")[0];
-    $("#lead-sucesso-nome").textContent = primeiroNome ? `${primeiroNome}, seu lugar está garantido.` : "Seu lugar está garantido.";
-    // reinicia as animações de desenho do "check"
-    etapaSucesso.style.animation = "none";
-    $$(".sucesso__marca circle, .sucesso__marca path", etapaSucesso).forEach((el) => {
+    $("[data-lead-nome]", etapa).textContent = primeiroNome ? `${primeiroNome}, seu lugar está garantido.` : "Seu lugar está garantido.";
+    // reinicia as animações de desenho do "check" (e a barra do aviso)
+    etapa.style.animation = "none";
+    $$(".sucesso__marca circle, .sucesso__marca path, .aviso__barra > span", etapa).forEach((el) => {
       el.style.animation = "none";
       void el.getBoundingClientRect();
       el.style.animation = "";
     });
-    void etapaSucesso.offsetWidth;
-    etapaSucesso.style.animation = "";
+    void etapa.offsetWidth;
+    etapa.style.animation = "";
     if (lead.classList.contains("is-aberto")) {
-      setTimeout(() => $("#lead-sucesso-titulo").focus({ preventScroll: true }), 60);
+      setTimeout(() => $(".lead__titulo", etapa).focus({ preventScroll: true }), 60);
     }
   }
 
