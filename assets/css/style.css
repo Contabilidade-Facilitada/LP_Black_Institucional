@@ -414,8 +414,10 @@ footer, .cruzamento { position: relative; z-index: 2; }
   border-top-color: #031a00;
   border-radius: 50%;
   opacity: 0;
-  animation: girar-simples 0.7s linear infinite;
 }
+/* gira só durante o envio: invisível e girando, obrigava a tela a ser
+   recomposta a cada quadro o tempo todo */
+.botao.is-carregando .botao__carregando { animation: girar-simples 0.7s linear infinite; }
 .botao.is-carregando { pointer-events: none; }
 .botao.is-carregando .botao__texto,
 .botao.is-carregando > .icone { opacity: 0; }
@@ -3560,6 +3562,41 @@ html:not(.sem-js) .quadro__icone .icone { stroke-dasharray: 100; stroke-dashoffs
 
   /* revelação sem o blur, que pesava com vários cartões entrando juntos */
   [data-revelar].is-visto { animation-name: revelar-leve; }
+
+  /* Enquanto o dedo rola a página (is-rolando, posta em main.js), os efeitos
+     em laço param onde estão e seguem quando a rolagem termina: somados,
+     dobravam o trabalho de desenho a cada quadro da rolagem. A lista é por
+     classe para a troca não recalcular o estilo da página inteira; as
+     entradas de uma vez só (revelação, peças, bonecos) seguem andando. */
+  .is-rolando .grao,
+  .is-rolando .tarja__trilho,
+  .is-rolando .faixa__trilho,
+  .is-rolando .vitrine__trilho,
+  .is-rolando .mural__trilho,
+  .is-rolando .faixa::after,
+  .is-rolando .tarja::after,
+  .is-rolando .botao__brilho,
+  .is-rolando .halo-cta::before,
+  .is-rolando .halo-cta::after,
+  .is-rolando .ponto-vivo::after,
+  .is-rolando .oferta__seta .icone,
+  .is-rolando .oferta__borda::before,
+  .is-rolando .laco__luz,
+  .is-rolando .capelo,
+  .is-rolando .heroi__aura,
+  .is-rolando .heroi__anel,
+  .is-rolando .escola__flutua,
+  .is-rolando .escola__halo,
+  .is-rolando .escola__brilho,
+  .is-rolando .escola__reflexo::before,
+  .is-rolando .recurso__icone .icone,
+  .is-rolando .seguir .icone,
+  .is-rolando .cf-cartao__halo,
+  .is-rolando .cf-cartao__capelo,
+  .is-rolando .gabriel__aura,
+  .is-rolando .gabriel__anel,
+  .is-rolando .gabriel__flutua,
+  .is-rolando .sucesso__marca::before { animation-play-state: paused; }
 }
 
 @keyframes revelar-leve {

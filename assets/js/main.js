@@ -1012,6 +1012,17 @@
       entradas.forEach((e) => e.target.classList.toggle("is-foco", e.isIntersecting));
     }, { rootMargin: "-40% 0px -40% 0px" });
     $$(".quadro, .recurso, .rotina, .indicador, .cf-cartao").forEach((el) => observadorFoco.observe(el));
+
+    // efeitos em laço parados durante a rolagem (ver is-rolando no CSS)
+    let fimRolagem = 0;
+    window.addEventListener("scroll", () => {
+      if (!fimRolagem) document.documentElement.classList.add("is-rolando");
+      clearTimeout(fimRolagem);
+      fimRolagem = setTimeout(() => {
+        fimRolagem = 0;
+        document.documentElement.classList.remove("is-rolando");
+      }, 200);
+    }, { passive: true });
   }
 
   /* ---------------------------------------------------------
