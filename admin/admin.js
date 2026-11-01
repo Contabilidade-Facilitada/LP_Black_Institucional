@@ -274,7 +274,7 @@
     // o endereço tem prioridade: é assim que um link copiado abre igual
     const hash = new URLSearchParams(location.hash.slice(1));
     if ([...hash.keys()].length) {
-      if (["geral", "cadastros", "pessoas", "origens", "eventos", "mapa"].includes(hash.get("aba"))) p.aba = hash.get("aba");
+      if (["geral", "campanhas", "cadastros", "pessoas", "origens", "eventos", "mapa"].includes(hash.get("aba"))) p.aba = hash.get("aba");
       p.periodo = PERIODOS.includes(hash.get("periodo")) ? hash.get("periodo") : "tudo";
       p.de = hash.get("de") || "";
       p.ate = hash.get("ate") || "";
@@ -1258,6 +1258,385 @@
   }
 
   /* ---------------------------------------------------------
+     Aba Campanhas: eficiência de cada campanha e de cada conjunto de
+     anúncios, julgada contra a média da própria página no período, com
+     dicas do que fazer. Sem gasto por enquanto (falta a chave de leitura do
+     Data Gateway); a comparação com a LP Esquenta Black vem do Worker.
+     --------------------------------------------------------- */
+  const MIN_VISITANTES = 30; // abaixo disso, a campanha ainda não é julgada
+  const MIN_DUELO = 30;
+  const SEM_CAMPANHA = "(sem campanha)";
+  const SINAIS = {
+    bom: { nome: "Acima da média", classe: "bom" },
+    media: { nome: "Na média", classe: "media" },
+    atencao: { nome: "Atenção", classe: "atencao" },
+    ruim: { nome: "Abaixo da média", classe: "ruim" },
+    pouco: { nome: "Pouco volume", classe: "pouco" },
+  };
+  // diferença entre duas proporções (z do teste de duas proporções)
+  function zDuas(x1, n1, x2, n2) {
+    if (!n1 || !n2) return 0;
+    const p = (x1 + x2) / (n1 + n2);
+    const erro = Math.sqrt(p * (1 - p) * (1 / n1 + 1 / n2));
+    return erro ? (x1 / n1 - x2 / n2) / erro : 0;
+  }
+  // visitantes por grupo para separar p1 de p2 com 95% de confiança e 80% de poder
+  function amostraNecessaria(p1, p2) {
+    const d = Math.abs(p1 - p2);
+    if (!d) return Infinity;
+    return Math.ceil(((1.96 + 0.84) ** 2 * (p1 * (1 - p1) + p2 * (1 - p2))) / d ** 2);
+  }
+  const razao = (a, b) => (b ? a / b : NaN);
+
+  // um grupo do funil: visitantes, quem abriu o formulário, cadastros e o
+  // engajamento (maior tempo e rolagem de cada visita)
+  const novoGrupo = (nome) => ({
+    nome, visitantes: new Set(), formulario: new Set(), cadastros: 0,
+    sessoes: new Map(), celular: new Set(), cadCelular: 0, cadComputador: 0, computador: new Set(),
+    pvs: [], cads: [],
+  });
+
+  function montarCampanhas(f) {
+    const campanhas = new Map();
+    const pegar = (mapa, chave, criar) => {
+      if (!mapa.has(chave)) mapa.set(chave, criar());
+      return mapa.get(chave);
+    };
+    const total = novoGrupo("página");
+    const gruposDe = (o) => {
+      const c = pegar(campanhas, o.utm_campaign || SEM_CAMPANHA, () => ({ ...novoGrupo(o.utm_campaign || SEM_CAMPANHA), conjuntos: new Map(), fonte: o }));
+      const j = pegar(c.conjuntos, o.utm_content || "(sem conjunto)", () => novoGrupo(o.utm_content || "(sem conjunto)"));
+      return [total, c, j];
+    };
+    for (const p of f.pvs) {
+      for (const g of gruposDe(p)) {
+        if (p.visitante) {
+          g.visitantes.add(p.visitante);
+          (p.dispositivo === "celular" ? g.celular : g.computador).add(p.visitante);
+        }
+        if (p.sessao && !g.sessoes.has(p.sessao)) g.sessoes.set(p.sessao, { tempo: 0, rolagem: 0 });
+        g.pvs.push(p);
+      }
+    }
+    for (const e of f.eventos) {
+      if (e.evento !== "lead_form_aberto" && e.evento !== "engajamento") continue;
+      const pv = sessaoDe(e);
+      if (!pv) continue;
+      for (const g of gruposDe(pv)) {
+        if (e.evento === "lead_form_aberto") { if (e.visitante) g.formulario.add(e.visitante); continue; }
+        const s = g.sessoes.get(e.sessao);
+        if (!s) continue;
+        s.tempo = Math.max(s.tempo, Number(e.valor) || 0);
+        s.rolagem = Math.max(s.rolagem, Number(e.detalhe) || 0);
+      }
+    }
+    for (const c of f.cadastros) {
+      for (const g of gruposDe(c)) {
+        g.cadastros++;
+        g.cads.push(c);
+        if (c.dispositivo === "celular") g.cadCelular++; else g.cadComputador++;
+      }
+    }
+    const fechar = (g) => {
+      g.nVis = g.visitantes.size;
+      g.nForm = g.formulario.size;
+      g.conv = razao(g.cadastros, g.nVis);
+      g.abre = razao(g.nForm, g.nVis);
+      g.fecha = razao(g.cadastros, g.nForm);
+      const sessoes = [...g.sessoes.values()];
+      g.tempoMed = sessoes.length ? mediana(sessoes.map((s) => s.tempo)) : NaN;
+      g.rolagemMed = sessoes.length ? mediana(sessoes.map((s) => s.rolagem)) : NaN;
+      g.convCelular = razao(g.cadCelular, g.celular.size);
+      g.convComputador = razao(g.cadComputador, g.computador.size);
+      return g;
+    };
+    fechar(total);
+    const lista = [...campanhas.values()].map((c) => {
+      fechar(c);
+      c.listaConjuntos = [...c.conjuntos.values()].map(fechar).sort((a, b) => b.nVis - a.nVis);
+      return c;
+    }).sort((a, b) => (a.nome === SEM_CAMPANHA) - (b.nome === SEM_CAMPANHA) || b.nVis - a.nVis);
+    return { total, lista };
+  }
+
+  // sinal contra o resto da página: só sai da "média" com diferença confiável
+  function sinalDe(g, total) {
+    if (g.nVis < MIN_VISITANTES) return "pouco";
+    const outrosVis = total.nVis - g.nVis;
+    const outrosCad = total.cadastros - g.cadastros;
+    if (outrosVis < MIN_VISITANTES) return "media";
+    const z = zDuas(g.cadastros, g.nVis, outrosCad, outrosVis);
+    const rel = razao(g.conv, razao(outrosCad, outrosVis));
+    if (z >= 1.64) return "bom";
+    if (z <= -1.64) return rel <= 0.6 || !g.cadastros ? "ruim" : "atencao";
+    return "media";
+  }
+
+  const comoPct = (x) => fmtPct(x, x < 0.1 ? 1 : 0);
+
+  // dicas: o que chama a atenção no funil da campanha e o que fazer
+  function dicasDe(c, total, sinal) {
+    const dicas = [];
+    const resto = razao(total.cadastros - c.cadastros, total.nVis - c.nVis);
+    const dica = (tipo, iconeNome, textoDica, acao) => dicas.push({ tipo, icone: iconeNome, texto: textoDica, acao });
+    if (/\{\{.*\}\}/.test(c.nome) || c.listaConjuntos?.some((j) => /\{\{.*\}\}/.test(j.nome))) {
+      dica("ruim", "alerta", "O nome chegou como {{...}}: o parâmetro dinâmico do Meta não foi preenchido. Corrija a URL do anúncio, ou as visitas dele ficam sem campanha.");
+    }
+    if (sinal === "pouco") {
+      dica("pouco", "relogio", `Ainda com ${plural(c.nVis, "visitante", "visitantes")}: a partir de ${MIN_VISITANTES} o painel compara com a média da página.`);
+      return dicas;
+    }
+    if (sinal === "bom") {
+      dica("bom", "subindo", `Converte ${comoPct(c.conv)}, contra ${comoPct(resto)} no resto da página. Candidata a receber mais verba.`);
+    }
+    if (total.abre > 0 && c.abre < total.abre * 0.7) {
+      dica("atencao", "clique", `Só ${comoPct(c.abre)} abrem o formulário (média da página: ${comoPct(total.abre)}). O anúncio pode prometer algo que a primeira tela não confirma: confira se a oferta do criativo aparece logo no topo.`);
+    }
+    if (c.nForm >= 10 && total.fecha > 0 && c.fecha < total.fecha * 0.7) {
+      dica("atencao", "formulario", `De quem abre o formulário, só ${comoPct(c.fecha)} terminam (média: ${comoPct(total.fecha)}). Veja nas gravações em que campo essas pessoas param.`, "gravacoes");
+    }
+    if (Number.isFinite(c.tempoMed) && c.tempoMed < 15 && (!(total.tempoMed < 15) || c.tempoMed < total.tempoMed * 0.6)) {
+      dica("atencao", "rolagem", `Metade das visitas dura no máximo ${fmtDuracao(c.tempoMed)} (na página toda: ${fmtDuracao(total.tempoMed)}). Sinal de clique curioso ou de público fora do perfil: revise a segmentação e o criativo.`);
+    }
+    if (c.celular.size >= 20 && c.computador.size >= 20 && c.convComputador > 0 && c.convCelular < c.convComputador * 0.5) {
+      dica("atencao", "celular", `No celular converte ${comoPct(c.convCelular)}; no computador, ${comoPct(c.convComputador)}. Teste a página no celular com essa campanha e confira o formulário.`, "gravacoes");
+    }
+    // queda nas últimas 24 horas
+    const corte = relogio() - DIA;
+    const recentesVis = new Set(c.pvs.filter((p) => p.ts >= corte).map((p) => p.visitante)).size;
+    const antesVis = new Set(c.pvs.filter((p) => p.ts < corte).map((p) => p.visitante)).size;
+    const recentesCad = c.cads.filter((x) => x.ts >= corte).length;
+    const antesCad = c.cads.length - recentesCad;
+    if (recentesVis >= 20 && antesVis >= 20 && antesCad >= 3) {
+      const agora = recentesCad / recentesVis;
+      const antes = antesCad / antesVis;
+      if (agora < antes * 0.6 && zDuas(recentesCad, recentesVis, antesCad, antesVis) <= -1.28) {
+        dica("ruim", "descendo", `A conversão caiu nas últimas 24 horas: ${comoPct(agora)}, contra ${comoPct(antes)} antes. Pode ser cansaço do criativo: renove os anúncios ou troque o destaque.`);
+      }
+    }
+    // conjuntos: o melhor e o pior com diferença confiável
+    const julgaveis = (c.listaConjuntos || []).filter((j) => j.nVis >= MIN_VISITANTES);
+    if (julgaveis.length >= 2) {
+      const ordem = [...julgaveis].sort((a, b) => b.conv - a.conv);
+      const [melhor, pior] = [ordem[0], ordem[ordem.length - 1]];
+      if (zDuas(melhor.cadastros, melhor.nVis, pior.cadastros, pior.nVis) >= 1.64) {
+        dica("bom", "balanca", `O conjunto ${nomeCurto(melhor.nome)} converte ${comoPct(melhor.conv)}; o ${nomeCurto(pior.nome)}, ${comoPct(pior.conv)}. Vale mover verba para o primeiro.`);
+      }
+    }
+    if (sinal === "ruim" || (sinal === "atencao" && !dicas.some((d) => d.tipo !== "bom"))) {
+      dica(sinal, "alerta", `Converte ${comoPct(c.conv)}, contra ${comoPct(resto)} no resto da página, com diferença que não parece acaso. Reduza a verba ou troque os criativos antes de escalar.`);
+    }
+    if (!dicas.length) dica("media", "lampada", `Dentro da média: ${comoPct(c.conv)}, contra ${comoPct(Number.isFinite(resto) ? resto : total.conv)} no resto da página. Nada fora do comum no funil.`);
+    return dicas;
+  }
+
+  // "bfn_26_f2_p2_int_concursos_lpfria" -> "int_concursos_lpfria": o prefixo
+  // comum aos conjuntos da Black só ocupa espaço
+  const nomeCurto = (nome = "") => nome.replace(/^bfn_\d+_f\d+_p\d+_/i, "");
+
+  function etiquetaSinal(chave, menor = false) {
+    const s = SINAIS[chave];
+    return el("span", { class: `sinal sinal--${s.classe}${menor ? " sinal--menor" : ""}` }, s.nome);
+  }
+
+  function filtrarCampanha(nome, aba) {
+    prefs.filtros.utm_campaign = [nome === SEM_CAMPANHA ? VAZIO : nome];
+    aplicarFiltros();
+    if (aba) trocarAba(aba);
+  }
+
+  function etapaFunil(rotulo, valor, base, nota, cor, i) {
+    const largura = base ? Math.max(2, (valor / base) * 100) : 0;
+    return el("div", { class: "camp-funil__etapa" },
+      el("div", { class: "camp-funil__cabeca" },
+        el("span", {}, rotulo),
+        el("strong", {}, fmtNum(valor), nota ? el("small", {}, nota) : null)),
+      el("div", { class: "trilho" },
+        el("span", { class: "trilho__barra", style: { width: `${largura}%`, background: cor, "--atraso": `${i * 90}ms` } })));
+  }
+
+  function cartaoCampanha(c, total, grade, i, animar) {
+    const sinal = sinalDe(c, total);
+    const dicas = dicasDe(c, total, sinal);
+    const rel = razao(c.conv, total.conv);
+    const faixa = el("div", { class: "camp__faisca" });
+    const cartao = el("article", { class: `campanha campanha--${SINAIS[sinal].classe}`, style: { "--i": String(i) } },
+      el("header", { class: "campanha__topo" },
+        el("div", { class: "campanha__nome" },
+          c.nome === SEM_CAMPANHA ? el("span", { class: "canal", style: { "--canal": "#6f655b" } }, "Sem UTM") : etiquetaCanal(c.fonte),
+          el("h3", { title: c.nome }, c.nome === SEM_CAMPANHA ? "Sem campanha (direto e orgânico)" : c.nome)),
+        etiquetaSinal(sinal)),
+      el("div", { class: "campanha__corpo" },
+        el("div", { class: "camp-funil" },
+          etapaFunil("Visitantes", c.nVis, c.nVis, null, CORES.funil[0], 0),
+          etapaFunil("Abriram o formulário", c.nForm, c.nVis, comoPct(c.abre), CORES.funil[1], 1),
+          etapaFunil("Cadastros", c.cadastros, c.nVis, comoPct(c.conv), CORES.cadastros, 2)),
+        el("div", { class: "campanha__numeros" },
+          el("div", { class: "camp-conversao" },
+            el("span", { class: "camp-conversao__rotulo" }, "Conversão"),
+            el("strong", {}, comoPct(c.conv)),
+            Number.isFinite(rel) && sinal !== "pouco"
+              ? el("span", { class: `camp-conversao__rel ${rel >= 1 ? "is-acima" : "is-abaixo"}` }, `${rel >= 1 ? "+" : "−"}${fmtPct(Math.abs(rel - 1), 0)} da média`)
+              : el("span", { class: "camp-conversao__rel" }, `média: ${comoPct(total.conv)}`)),
+          el("dl", { class: "camp-engaja" },
+            el("div", {}, el("dt", {}, "Tempo mediano"), el("dd", {}, Number.isFinite(c.tempoMed) ? fmtDuracao(c.tempoMed) : "—")),
+            el("div", {}, el("dt", {}, "Rolagem mediana"), el("dd", {}, Number.isFinite(c.rolagemMed) ? `${fmtNum(c.rolagemMed)}%` : "—")),
+            el("div", {}, el("dt", {}, "No celular"), el("dd", {}, comoPct(razao(c.celular.size, c.nVis))))),
+          el("div", { class: "camp__grafico" }, faixa, el("small", {}, grade.escala === DIA ? "visitantes por dia" : "visitantes por hora")))),
+      el("ul", { class: "camp-dicas" }, dicas.map((d) => el("li", { class: `camp-dica camp-dica--${d.tipo}` },
+        icone(d.icone, "icone camp-dica__icone"),
+        el("p", {}, d.texto),
+        d.acao === "gravacoes" ? el("button", { type: "button", class: "camp-dica__acao", dataset: { campanha: c.nome, aba: "pessoas" } }, icone("play"), "Ver gravações") : null))),
+      c.listaConjuntos.length > 1 || (c.listaConjuntos[0] && c.listaConjuntos[0].nome !== "(sem conjunto)")
+        ? el("details", { class: "camp-conjuntos", dataset: { campanha: c.nome }, open: conjuntosAbertos.has(c.nome) || null },
+          el("summary", {}, icone("seta"), plural(c.listaConjuntos.length, "conjunto de anúncios", "conjuntos de anúncios")),
+          el("div", { class: "tabela-rolagem" },
+            el("table", { class: "tabela tabela--numeros tabela--compacta" },
+              el("thead", {}, el("tr", {},
+                el("th", { scope: "col" }, "Conjunto"),
+                el("th", { scope: "col", class: "num" }, "Visitantes"),
+                el("th", { scope: "col", class: "num" }, "Formulário"),
+                el("th", { scope: "col", class: "num" }, "Cadastros"),
+                el("th", { scope: "col", class: "num" }, "Conversão"),
+                el("th", { scope: "col" }, "Sinal"))),
+              el("tbody", {}, c.listaConjuntos.map((j) => el("tr", {},
+                el("td", { class: "forte", title: j.nome }, nomeCurto(j.nome)),
+                el("td", { class: "num" }, fmtNum(j.nVis)),
+                el("td", { class: "num" }, comoPct(j.abre)),
+                el("td", { class: "num" }, fmtNum(j.cadastros)),
+                el("td", { class: "num" }, comoPct(j.conv)),
+                el("td", {}, etiquetaSinal(sinalDe(j, total), true))))))))
+        : null,
+      el("footer", { class: "campanha__rodape" },
+        el("button", { type: "button", class: "botao-texto", dataset: { campanha: c.nome } }, icone("filtro"), "Filtrar o painel por esta campanha")));
+    cartao._sinal = sinal;
+    cartao._faixa = () => faisca(faixa, { valores: distintosPorBalde(grade, c.pvs, "visitante"), corSerie: CORES.visitantes, animar });
+    return cartao;
+  }
+
+  // comparação com a Esquenta: busca no Worker, guardada por 2 minutos
+  const duelo = { chave: "", dados: null, buscando: false, quando: 0, erro: false };
+  async function buscarDuelo(inicio, fim, nomes) {
+    const chave = [Math.floor(inicio / 60000), Math.floor(fim / 300000), ...nomes].join("|");
+    if (duelo.buscando || (duelo.chave === chave && relogio() - duelo.quando < 120000)) return;
+    duelo.buscando = true;
+    try {
+      let corpo;
+      if (DEMO) {
+        corpo = { gasto: null, esquenta: nomes.flatMap((n) => [
+          { campanha: n, conjunto: `${n}_agrupado`.replace(/^black_november_2026_/, "bfn_26_"), visitantes: 180 + (n.length * 7) % 90, formulario: 60, cadastros: 14 + (n.length % 9) },
+        ]) };
+      } else {
+        const q = new URLSearchParams({ ini: String(Math.round(inicio)), fim: String(Math.round(fim)) });
+        nomes.forEach((n) => q.append("c", n));
+        const r = await fetch(`/admin/api/campanhas?${q}`, { credentials: "same-origin" });
+        if (r.status === 401) { location.href = "/admin/entrar"; return; }
+        if (!r.ok) throw new Error(String(r.status));
+        corpo = await r.json();
+      }
+      Object.assign(duelo, { chave, dados: corpo, quando: relogio(), erro: false });
+    } catch {
+      duelo.erro = true;
+    } finally {
+      duelo.buscando = false;
+    }
+    if (prefs.aba === "campanhas") renderDuelo();
+  }
+
+  // público do conjunto daqui ("..._lpfria") e os conjuntos da Esquenta com o
+  // mesmo começo de nome (mesmo público, outra página)
+  function paresDoDuelo(lista) {
+    const pares = [];
+    for (const c of lista) {
+      if (c.nome === SEM_CAMPANHA) continue;
+      for (const j of c.listaConjuntos) {
+        const publico = j.nome.replace(/_lpfria$/i, "");
+        if (publico === j.nome) continue;
+        const la = (duelo.dados?.esquenta || []).filter((l) => l.campanha === c.nome && l.conjunto && l.conjunto.startsWith(`${publico}_`));
+        if (!la.length) continue;
+        const soma = (k) => la.reduce((s, l) => s + (Number(l[k]) || 0), 0);
+        pares.push({ campanha: c.nome, publico, aqui: { vis: j.nVis, form: j.nForm, cad: j.cadastros }, la: { vis: soma("visitantes"), form: soma("formulario"), cad: soma("cadastros"), conjuntos: la.length } });
+      }
+    }
+    return pares;
+  }
+
+  let ultimaListaCampanhas = [];
+  // a lista é refeita a cada dado novo: os conjuntos abertos continuam abertos
+  const conjuntosAbertos = new Set();
+  function renderDuelo() {
+    const alvo = $("#duelo");
+    if (duelo.erro && !duelo.dados) { alvo.replaceChildren(el("p", { class: "vazio" }, "Não foi possível buscar os números da Esquenta agora. O painel tenta de novo na próxima atualização.")); return; }
+    if (!duelo.dados) { alvo.replaceChildren(el("p", { class: "vazio" }, "Buscando os números da Esquenta…")); return; }
+    const pares = paresDoDuelo(ultimaListaCampanhas);
+    if (!pares.length) { alvo.replaceChildren(el("p", { class: "vazio" }, "Nenhum público aparece nas duas páginas neste período (conjuntos terminados em _lpfria aqui e com o mesmo começo de nome lá).")); return; }
+    alvo.replaceChildren(...pares.map((p) => {
+      const cAqui = razao(p.aqui.cad, p.aqui.vis);
+      const cLa = razao(p.la.cad, p.la.vis);
+      const z = zDuas(p.aqui.cad, p.aqui.vis, p.la.cad, p.la.vis);
+      let veredito;
+      let classe = "media";
+      if (p.aqui.vis < MIN_DUELO || p.la.vis < MIN_DUELO) {
+        veredito = `Pouco volume para decidir: são precisos ao menos ${MIN_DUELO} visitantes em cada página.`;
+        classe = "pouco";
+      } else if (Math.abs(z) >= 1.96) {
+        veredito = z > 0 ? "Esta página converte mais, com 95% de confiança." : "A Esquenta converte mais, com 95% de confiança.";
+        classe = z > 0 ? "bom" : "ruim";
+      } else {
+        const n = amostraNecessaria(cAqui, cLa);
+        veredito = !Number.isFinite(n)
+          ? "As duas convertem igual até aqui."
+          : `Ainda sem diferença confiável. Para separar ${comoPct(cAqui)} de ${comoPct(cLa)}, faltam cerca de ${fmtNum(Math.max(0, n - Math.min(p.aqui.vis, p.la.vis)))} visitantes por página.`;
+      }
+      const lado = (titulo, d, conv, vence) => el("div", { class: `duelo__lado${vence ? " is-vence" : ""}` },
+        el("span", { class: "duelo__pagina" }, titulo),
+        el("strong", { class: "duelo__conv" }, comoPct(conv)),
+        el("span", { class: "duelo__detalhe" }, `${plural(d.cad, "cadastro", "cadastros")} de ${plural(d.vis, "visitante", "visitantes")}`),
+        el("span", { class: "duelo__detalhe" }, `formulário aberto por ${comoPct(razao(d.form, d.vis))}`));
+      return el("article", { class: `duelo duelo--${classe}` },
+        el("header", { class: "duelo__topo" },
+          el("h3", { title: p.publico }, nomeCurto(p.publico)),
+          el("span", { class: "duelo__campanha", title: p.campanha }, p.campanha)),
+        el("div", { class: "duelo__lados" },
+          lado("Esta página", p.aqui, cAqui, classe === "bom"),
+          el("span", { class: "duelo__x", "aria-hidden": "true" }, "×"),
+          lado(p.la.conjuntos > 1 ? `Esquenta (${p.la.conjuntos} conjuntos)` : "Esquenta", p.la, cLa, classe === "ruim")),
+        el("p", { class: `duelo__veredito duelo__veredito--${classe}` }, icone(classe === "pouco" ? "relogio" : "balanca"), veredito));
+    }));
+  }
+
+  function renderCampanhas(f, { animar, aoVivo }) {
+    const { total, lista } = montarCampanhas(f);
+    ultimaListaCampanhas = lista;
+    const comVisitas = lista.filter((c) => c.nVis > 0 && c.nome !== SEM_CAMPANHA);
+    contar("#k-camp-total", comVisitas.length, fmtNum, aoVivo);
+    texto("#k-camp-total-nota", plural(comVisitas.reduce((s, c) => s + c.listaConjuntos.length, 0), "conjunto de anúncios", "conjuntos de anúncios"));
+    contar("#k-camp-media", total.conv, (v) => comoPct(v), aoVivo);
+    texto("#k-camp-media-nota", `${plural(total.cadastros, "cadastro", "cadastros")} de ${plural(total.nVis, "visitante", "visitantes")}`);
+
+    const grade = gradeTempo(f.inicio, f.fim, escalaDe(f.inicio, f.fim));
+    const cartoes = lista.map((c, i) => cartaoCampanha(c, total, grade, i, animar));
+    const julgadas = lista.filter((c) => c.nVis >= MIN_VISITANTES && c.nome !== SEM_CAMPANHA);
+    const melhor = [...julgadas].sort((a, b) => b.conv - a.conv)[0];
+    texto("#k-camp-melhor", melhor ? comoPct(melhor.conv) : "—");
+    const notaMelhor = $("#k-camp-melhor-nota");
+    notaMelhor.textContent = melhor ? melhor.nome : `nenhuma com ${MIN_VISITANTES} visitantes ainda`;
+    notaMelhor.title = melhor ? melhor.nome : "";
+    const alertas = cartoes.filter((c) => c._sinal === "ruim" || c._sinal === "atencao").length;
+    contar("#k-camp-alerta", alertas, fmtNum, aoVivo);
+    $("#k-camp-alerta").closest(".kpi").classList.toggle("kpi--alerta", alertas > 0);
+
+    const alvo = $("#campanhas-lista");
+    alvo.classList.toggle("anima", Boolean(animar && !movimentoReduzido));
+    alvo.replaceChildren(...(cartoes.length ? cartoes : [el("p", { class: "vazio" }, "Sem visitas no período.")]));
+    cartoes.forEach((c) => c._faixa());
+
+    renderDuelo();
+    const nomes = comVisitas.map((c) => c.nome).filter((n) => !/\{\{/.test(n)).slice(0, 40);
+    if (nomes.length) buscarDuelo(f.inicio, f.fim, nomes);
+  }
+
+  /* ---------------------------------------------------------
      Aba 4: eventos do GTM (dataLayer)
      --------------------------------------------------------- */
   function renderEventos(f, { animar, aoVivo }) {
@@ -1784,6 +2163,12 @@
     alerta: '<svg viewBox="0 0 24 24"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/></svg>',
     telaCheia: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
     sairTela: '<svg viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>',
+    // aba Campanhas
+    filtro: '<svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg>',
+    lampada: '<svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>',
+    subindo: '<svg viewBox="0 0 24 24"><path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>',
+    descendo: '<svg viewBox="0 0 24 24"><path d="m3 7 6 6 4-4 8 8"/><path d="M15 17h6v-6"/></svg>',
+    balanca: '<svg viewBox="0 0 24 24"><path d="M12 3v18M7 21h10M5 7h14"/><path d="m5 7-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/></svg>',
   };
   // canal de chegada da visita, numa etiqueta com a cor da plataforma
   const CANAIS = [
@@ -2855,6 +3240,7 @@
       const anterior = prefs.periodo === "tudo" ? null : fatiar(inicio - (fim - inicio), inicio);
       renderGeral(f, anterior, opcoes);
     } else if (prefs.aba === "cadastros") renderCadastros(f, opcoes);
+    else if (prefs.aba === "campanhas") renderCampanhas(f, opcoes);
     else if (prefs.aba === "origens") renderOrigens(f, opcoes);
     else if (prefs.aba === "eventos") renderEventos(f, opcoes);
     else if (prefs.aba === "mapa") renderMapa(f, opcoes);
@@ -3038,6 +3424,52 @@
     }, 6000);
   }
 
+  /* ---------------------------------------------------------
+     Cópias da LP em outros domínios: aviso acima das abas, com
+     os domínios vistos nos últimos 30 dias (ver CÓPIAS DA PÁGINA
+     em cloudflare/worker.js)
+     --------------------------------------------------------- */
+  const SINAIS_COPIA = {
+    script: "o código da LP rodou lá",
+    estilo: "o CSS da LP foi carregado lá",
+    arquivo: "imagens ou arquivos puxados daqui",
+    envio: "tentou enviar dados para a coleta da LP",
+  };
+  let copiasMostradas = "";
+
+  function renderCopias(copias) {
+    // redesenha só quando muda; a hora relativa anda no próximo sinal
+    const assinaturaCopias = JSON.stringify(copias);
+    if (assinaturaCopias === copiasMostradas) return;
+    copiasMostradas = assinaturaCopias;
+    const aviso = $("#aviso-copias");
+    aviso.hidden = !copias.length;
+    if (!copias.length) return;
+    aviso.replaceChildren(
+      el("p", { class: "aviso-copias__titulo" },
+        el("strong", {}, copias.length === 1
+          ? "Possível cópia desta LP em outro domínio"
+          : `Possíveis cópias desta LP em ${fmtNum(copias.length)} domínios`),
+        " · últimos 30 dias"),
+      el("ul", { class: "aviso-copias__lista" }, copias.map((c) => el("li", {},
+        el("strong", { class: "aviso-copias__dominio" }, c.dominio),
+        el("span", {}, [
+          `último sinal: ${fmtRelativo(c.ultimo_ts)}`,
+          `primeiro: ${fmtDataHora.format(c.primeiro_ts)}`,
+          c.visitas ? plural(c.visitas, "visita levada para a LP", "visitas levadas para a LP") : null,
+          c.vindo_de ? `visitantes vindos de ${c.vindo_de}` : null,
+        ].filter(Boolean).join(" · ")),
+        el("span", { class: "aviso-copias__sinais" },
+          String(c.sinais || "").split(",").map((s) => SINAIS_COPIA[s] || s).join("; ")),
+        // texto, e não link: ninguém abre a cópia por engano daqui
+        c.exemplo ? el("code", { class: "aviso-copias__endereco" }, c.exemplo) : null))),
+      el("p", { class: "aviso-copias__acao" },
+        "Se for golpe, denuncie no ",
+        el("a", { href: "https://safebrowsing.google.com/safebrowsing/report_phish/?hl=pt-BR", target: "_blank", rel: "noopener noreferrer" }, "Google Safe Browsing"),
+        " e ao provedor do domínio. Ao conferir a cópia, não preencha nada nela."),
+    );
+  }
+
   async function sincronizar() {
     if (DEMO) { sincronizarDemo(); return; }
     clearTimeout(espera);
@@ -3064,6 +3496,7 @@
 
         dados.desvio = corpo.agora - Date.now();
         if (corpo.email) texto("#usuario", corpo.email);
+        if (corpo.copias) renderCopias(corpo.copias);
         const ev = absorver(corpo.eventos, "eventos");
         const cad = absorver(corpo.cadastros, "cadastros");
         if (ev.length || cad.length) mudou = true;
@@ -3218,6 +3651,16 @@
     gravarPrefs();
     render({ animar: true });
   });
+  $("#campanhas-lista").addEventListener("click", (e) => {
+    const botao = e.target.closest("button[data-campanha]");
+    if (botao) filtrarCampanha(botao.dataset.campanha, botao.dataset.aba);
+  });
+  // "toggle" não sobe pela árvore: escuta na captura
+  $("#campanhas-lista").addEventListener("toggle", (e) => {
+    const d = e.target;
+    if (!d.matches?.("details[data-campanha]")) return;
+    if (d.open) conjuntosAbertos.add(d.dataset.campanha); else conjuntosAbertos.delete(d.dataset.campanha);
+  }, true);
   $("#tabela-origens tbody").addEventListener("click", (e) => {
     const tr = e.target.closest("tr[data-dimensao]");
     if (tr) filtrarPorLinha(tr);

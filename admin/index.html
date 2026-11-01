@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20261030-4">
-  <script src="admin.js?v=20261030-4" defer></script>
+  <link rel="stylesheet" href="admin.css?v=20261101-1">
+  <script src="admin.js?v=20261101-1" defer></script>
 </head>
 <body class="is-iniciando">
   <div class="brilho" aria-hidden="true"></div>
@@ -44,6 +44,7 @@
 
   <nav class="abas" role="tablist" aria-label="Seções do painel">
     <button class="abas__item" role="tab" id="aba-geral" aria-controls="painel-geral" aria-selected="true" data-aba="geral">Visão geral</button>
+    <button class="abas__item" role="tab" id="aba-campanhas" aria-controls="painel-campanhas" aria-selected="false" tabindex="-1" data-aba="campanhas">Campanhas</button>
     <button class="abas__item" role="tab" id="aba-cadastros" aria-controls="painel-cadastros" aria-selected="false" tabindex="-1" data-aba="cadastros">
       Cadastros <span class="abas__contagem" id="contagem-cadastros">0</span>
     </button>
@@ -81,6 +82,8 @@
       Os dados reais aparecem em /admin/ no endereço da LP, servido pelo Worker do Cloudflare.
     </p>
     <p class="aviso-erro" id="aviso-erro" role="alert" hidden></p>
+    <!-- cópias da LP em outros domínios (ver CÓPIAS DA PÁGINA em cloudflare/worker.js) -->
+    <section class="aviso-copias" id="aviso-copias" aria-label="Possíveis cópias da LP" hidden></section>
 
     <!-- ===================== 1. Visão geral ===================== -->
     <section class="painel" id="painel-geral" role="tabpanel" aria-labelledby="aba-geral">
@@ -201,6 +204,47 @@
           <div class="calor" id="calor"></div>
         </article>
       </div>
+    </section>
+
+    <!-- ===================== Campanhas ===================== -->
+    <section class="painel" id="painel-campanhas" role="tabpanel" aria-labelledby="aba-campanhas" hidden>
+      <div class="kpis kpis--4">
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Campanhas no período</h2>
+          <p class="kpi__valor" id="k-camp-total">0</p>
+          <p class="kpi__nota" id="k-camp-total-nota"></p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Conversão da página</h2>
+          <p class="kpi__valor" id="k-camp-media">0%</p>
+          <p class="kpi__nota" id="k-camp-media-nota"></p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Melhor campanha</h2>
+          <p class="kpi__valor" id="k-camp-melhor">—</p>
+          <p class="kpi__nota kpi__nota--corta" id="k-camp-melhor-nota"></p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Pedem atenção</h2>
+          <p class="kpi__valor" id="k-camp-alerta">0</p>
+          <p class="kpi__nota">abaixo da média com diferença confiável</p>
+        </article>
+      </div>
+
+      <aside class="aviso-gasto" id="camp-gasto">
+        <span class="aviso-gasto__icone" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .9-3 2.2 0 3 6 1.6 6 4.6 0 1.3-1.3 2.2-3 2.2-1.4 0-2.6-.6-3-1.6M12 6v2M12 16v2"/></svg></span>
+        <p><strong>Gasto e custo por cadastro ainda não aparecem.</strong> Entram quando o painel tiver a chave de leitura do Data Gateway. Até lá, cada campanha é julgada pela conversão, contra a média da própria página.</p>
+      </aside>
+
+      <div class="campanhas" id="campanhas-lista"></div>
+
+      <article class="cartao cartao--duelo">
+        <header class="cartao__topo">
+          <h2>Esta página × Esquenta</h2>
+          <p>o mesmo público nas duas páginas: conjuntos terminados em _lpfria aqui, os de mesmo começo de nome lá</p>
+        </header>
+        <div class="duelos" id="duelo"></div>
+      </article>
     </section>
 
     <!-- ===================== 2. Cadastros ===================== -->

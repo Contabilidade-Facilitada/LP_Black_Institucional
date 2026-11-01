@@ -10,6 +10,7 @@
  *   POST /api/coleta     acessos e eventos do dataLayer (público)
  *   POST /api/cadastro   cópia de cada cadastro da Lista VIP (público)
  *   POST /api/gravacao   partes da gravação de uma visita (público)
+ *   POST /api/endereco   aviso de cópia da LP aberta em outro domínio (público)
  *   GET  /api/metricas-gateway agregado sem dados pessoais (token)
  *   GET  /admin/         painel (exige login)
  *   GET  /admin/api/sync dados do painel (idem)
@@ -42,6 +43,22 @@
  * Contra quem tenta adivinhar a senha: 5 erros seguidos bloqueiam aquele
  * endereço de internet por 15 minutos, e 30 erros numa hora (de qualquer
  * endereço) fecham o login por até 1 hora, inclusive para quem tem a senha.
+ *
+ * CÓPIAS DA PÁGINA
+ * Não há como impedir que alguém copie a LP; o Worker tenta descobrir quando
+ * isso acontece e guarda o domínio em copias_pf, que o painel mostra num
+ * aviso. Quatro sinais:
+ *   script   o trecho no <head> do index.html, numa cópia aberta fora dos
+ *            nossos domínios, avisa /api/endereco e leva o visitante para a
+ *            LP verdadeira
+ *   estilo   o style.css pede /assets/img/fundo.gif pelo endereço completo;
+ *            numa cópia que levou o CSS, o pedido chega com o domínio dela
+ *   arquivo  imagem, CSS ou script daqui carregado por página de outro domínio
+ *            (ou a LP inteira dentro de uma moldura de outro site)
+ *   envio    POST de outro domínio nas rotas de coleta
+ * Quem copia com cuidado tira o script, troca os endereços e esconde o
+ * domínio de origem (Referrer-Policy); estes sinais pegam as cópias feitas
+ * às pressas, que são a maioria.
  */
 
 // Linhas por resposta da sincronização do painel. A primeira carga pede
@@ -50,9 +67,12 @@
 const LINHAS_POR_PAGINA = 10000;
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const caminho = url.pathname;
+
+    const copia = arquivoPedidoDeFora(request, caminho);
+    if (copia) ctx.waitUntil(registrarCopia(env, copia));
 
     // A página do painel referencia tudo por caminho relativo ("admin.css").
     // Em /admin, sem barra, o navegador resolveria isso para /admin.css, fora
@@ -62,11 +82,24 @@ export default {
     }
 
     if (caminho === "/api/coleta" || caminho === "/api/cadastro") {
-      return receber(request, env, url, caminho === "/api/cadastro");
+      return receber(request, env, ctx, url, caminho === "/api/cadastro");
     }
 
     if (caminho === "/api/gravacao") {
-      return receberGravacao(request, env, url);
+      return receberGravacao(request, env, ctx, url);
+    }
+
+    if (caminho === "/api/endereco") {
+      return receberEndereco(request, env);
+    }
+
+    // pedido pelo style.css com o endereço completo (ver CÓPIAS DA PÁGINA):
+    // um gif transparente de 1 pixel, nunca guardado em cache, para cada
+    // visita a uma cópia chegar até aqui
+    if (caminho === "/assets/img/fundo.gif") {
+      return new Response(GIF_VAZIO, {
+        headers: { "Content-Type": "image/gif", "Cache-Control": "no-store" },
+      });
     }
 
     if (caminho === "/api/metricas-gateway") {
@@ -125,11 +158,10 @@ const RETENCAO_GRAVACOES_MS = 15 * 86400000;
 // Partes da gravação de uma visita (ver main.js). A primeira parte também
 // vira um evento "gravacao", para o painel saber quais visitas foram gravadas
 // sem precisar baixar as gravações; cada uma só é baixada quando aberta.
-async function receberGravacao(request, env, url) {
+async function receberGravacao(request, env, ctx, url) {
   if (request.method !== "POST") return resposta(405);
   if (!env.DB) return resposta(503);
-  const origemDeclarada = request.headers.get("Origin");
-  if (origemDeclarada && origemDeclarada !== url.origin) return resposta(403);
+  if (envioDeFora(request, env, ctx, url)) return resposta(403);
   const agente = request.headers.get("User-Agent") || "";
   if (ROBOS.test(agente) || ehRoboMeta(agente) || ehRedeMeta(request)) return resposta(204);
 
@@ -171,13 +203,11 @@ const ehRoboMeta = (agente) => /FBAN|FBAV|FB_IAB/i.test(agente)
 // não navegam por essa rede.
 const ehRedeMeta = (request) => request.cf?.asn === 32934;
 
-async function receber(request, env, url, ehCadastro) {
+async function receber(request, env, ctx, url, ehCadastro) {
   if (request.method !== "POST") return resposta(405);
   if (!env.DB) return resposta(503);
 
-  // os envios saem da própria LP; qualquer outra origem declarada é recusada
-  const origemDeclarada = request.headers.get("Origin");
-  if (origemDeclarada && origemDeclarada !== url.origin) return resposta(403);
+  if (envioDeFora(request, env, ctx, url)) return resposta(403);
 
   const agente = request.headers.get("User-Agent") || "";
   if (ROBOS.test(agente) || ehRoboMeta(agente) || ehRedeMeta(request)) return resposta(204);
@@ -300,6 +330,131 @@ function inserirVarias(db, tabela, linhas) {
 }
 
 /* ---------------------------------------------------------------------------
+   Cópias da página (ver CÓPIAS DA PÁGINA no início do arquivo)
+   --------------------------------------------------------------------------- */
+
+// Domínios que podem mostrar a LP ou carregar os arquivos dela: os da empresa,
+// o workers.dev deste Worker (e as prévias de versão, "<versão>-lp-black-..."),
+// o tradutor e o cache do Google e o teste local. A mesma lista está no trecho
+// do <head> do index.html; mudar nos dois lugares.
+const DOMINIOS_PROPRIOS = /(^|\.)(contabilidadefacilitada\.com(\.br)?|translate\.goog|googleusercontent\.com)$|^(localhost|127\.0\.0\.1)$|lp-black-institucional\.gabrielrabelo87\.workers\.dev$/;
+
+const GIF_VAZIO = Uint8Array.from(atob("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"), (c) => c.charCodeAt(0));
+
+const JANELA_COPIAS_MS = 30 * 86400000;
+
+function dominioDe(endereco) {
+  try {
+    const u = new URL(endereco);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.hostname.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+const dominioAlheio = (dominio) => Boolean(dominio) && !DOMINIOS_PROPRIOS.test(dominio);
+
+// Arquivo daqui pedido por página de outro domínio (o Referer diz qual). A
+// abertura da própria LP fica de fora: nela o Referer é o site de onde a
+// pessoa veio (Google, Instagram), e não quem mostra a página. A LP aberta
+// dentro de uma moldura (iframe) de outro site conta.
+function arquivoPedidoDeFora(request, caminho) {
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+  if (caminho === "/" || caminho.endsWith(".html")) return null;
+  const destino = request.headers.get("Sec-Fetch-Dest");
+  if (destino === "document") return null;
+  // navegador sem Sec-Fetch-Dest: a abertura de página pede HTML
+  if (!destino && /text\/html/.test(request.headers.get("Accept") || "")) return null;
+  if (ROBOS.test(request.headers.get("User-Agent") || "")) return null;
+  const referencia = request.headers.get("Referer") || "";
+  const dominio = dominioDe(referencia);
+  if (!dominioAlheio(dominio)) return null;
+  return {
+    dominio,
+    sinal: caminho === "/assets/img/fundo.gif" ? "estilo" : "arquivo",
+    exemplo: referencia,
+  };
+}
+
+// Envio às rotas de coleta feito por página de outra origem: recusado, como
+// antes, e o domínio vai para copias_pf quando não é nosso (o workers.dev é
+// outra origem, mas é nosso). Origin "null" ou ausente não vira registro.
+function envioDeFora(request, env, ctx, url) {
+  const origem = request.headers.get("Origin");
+  if (!origem || origem === url.origin) return false;
+  const dominio = dominioDe(origem);
+  if (dominioAlheio(dominio)) {
+    ctx.waitUntil(registrarCopia(env, { dominio, sinal: "envio", exemplo: origem }));
+  }
+  return true;
+}
+
+// Aviso do trecho do <head> numa cópia aberta em outro domínio. O domínio vem
+// do Origin, que o navegador preenche e a página não consegue trocar; o corpo
+// traz o endereço completo da cópia (u) e de onde o visitante chegou nela (r).
+async function receberEndereco(request, env) {
+  if (request.method !== "POST") return resposta(405);
+  const texto = await request.text();
+  if (texto.length > 4000) return resposta(413);
+  let d = {};
+  try { d = JSON.parse(texto) || {}; } catch { /* vale só o Origin */ }
+  const dominio = dominioDe(request.headers.get("Origin") || "") || dominioDe(String(d.u || ""));
+  if (dominioAlheio(dominio)) {
+    await registrarCopia(env, {
+      dominio,
+      sinal: "script",
+      exemplo: typeof d.u === "string" ? d.u : null,
+      vindoDe: dominioDe(String(d.r || "")),
+    });
+  }
+  return resposta(204);
+}
+
+// Uma linha por domínio. Os sinais se acumulam ("script,estilo"); "visitas"
+// conta os avisos do script, um por visita à cópia. Os outros sinais chegam a
+// cada arquivo pedido e só atualizam a linha uma vez por minuto (ou quando
+// trazem um sinal novo), para uma cópia muito acessada não gastar gravações.
+// O endereço completo enviado pelo script prevalece sobre o dos outros sinais,
+// que costuma ter só o domínio.
+const SQL_REGISTRAR_COPIA = `
+INSERT INTO copias_pf (dominio, primeiro_ts, ultimo_ts, sinais, visitas, exemplo, vindo_de)
+VALUES (?1, ?2, ?2, ?3, ?4, ?5, ?6)
+ON CONFLICT (dominio) DO UPDATE SET
+  ultimo_ts = excluded.ultimo_ts,
+  sinais = CASE WHEN instr(',' || sinais || ',', ',' || excluded.sinais || ',') > 0
+                THEN sinais ELSE sinais || ',' || excluded.sinais END,
+  visitas = visitas + excluded.visitas,
+  exemplo = COALESCE(CASE WHEN excluded.visitas > 0 THEN excluded.exemplo END, exemplo, excluded.exemplo),
+  vindo_de = COALESCE(excluded.vindo_de, vindo_de)
+WHERE excluded.visitas > 0
+   OR instr(',' || copias_pf.sinais || ',', ',' || excluded.sinais || ',') = 0
+   OR excluded.ultimo_ts - copias_pf.ultimo_ts > 60000`;
+
+async function registrarCopia(env, c) {
+  if (!env.DB) return;
+  try {
+    await env.DB.prepare(SQL_REGISTRAR_COPIA)
+      .bind(corte(c.dominio, 253), Date.now(), c.sinal, c.sinal === "script" ? 1 : 0, corte(c.exemplo, 500), corte(c.vindoDe, 253))
+      .run();
+  } catch {
+    /* sem a tabela copias_pf (schema.sql ainda não rodou), o aviso se perde */
+  }
+}
+
+// cópias vistas nos últimos 30 dias, para o aviso do painel; sem a tabela, nenhuma
+async function copiasRecentes(db) {
+  try {
+    const { results } = await db
+      .prepare("SELECT dominio, primeiro_ts, ultimo_ts, sinais, visitas, exemplo, vindo_de FROM copias_pf WHERE ultimo_ts > ? ORDER BY ultimo_ts DESC LIMIT 50")
+      .bind(Date.now() - JANELA_COPIAS_MS)
+      .all();
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+/* ---------------------------------------------------------------------------
    Agregado para o Data Gateway (recurso black_lp_institucional_funil_diario,
    que o BI lê). Mesmo formato da rota da Esquenta Black: por dia de Brasília ×
    UTMs × dispositivo, sem nome, e-mail, telefone, visitante ou sessão. A
@@ -368,6 +523,90 @@ async function metricasGateway(request, env) {
 }
 
 /* ---------------------------------------------------------------------------
+   Aba Campanhas: as mesmas campanhas na LP Esquenta Black
+   ---------------------------------------------------------------------------
+   As campanhas desta página também mandam gente para a Esquenta (conjuntos
+   "_lpfria" aqui, os outros lá). Para comparar as duas páginas, o painel pede
+   o funil das mesmas campanhas nas tabelas da Esquenta (eventos e cadastros),
+   que estão no mesmo banco. Essas tabelas não têm índice por data e passam de
+   1 milhão de linhas: uma busca binária no id (que cresce com o tempo) acha o
+   começo do período com umas 60 leituras, e a soma lê só dali em diante.
+   A resposta fica 2 minutos no cache do Cloudflare.
+   O gasto dos anúncios entra quando houver a chave de leitura do Data
+   Gateway; até lá vai nulo e o painel mostra o funil sem custo. */
+const MAXIMO_CAMPANHAS = 40;
+const CACHE_CAMPANHAS_S = 120;
+// folga para eventos gravados fora de ordem (o "dt" do lote ajusta o ts)
+const FOLGA_CORTE_MS = 3600000;
+
+const sqlCorte = (tabela) => `WITH RECURSIVE b(lo, hi) AS (
+  SELECT 1, (SELECT COALESCE(MAX(id), 0) FROM ${tabela}) + 1
+  UNION ALL
+  SELECT
+    CASE WHEN (SELECT ts FROM ${tabela} WHERE id >= (lo + hi) / 2 ORDER BY id LIMIT 1) < ?1 THEN (lo + hi) / 2 + 1 ELSE lo END,
+    CASE WHEN (SELECT ts FROM ${tabela} WHERE id >= (lo + hi) / 2 ORDER BY id LIMIT 1) < ?1 THEN hi ELSE (lo + hi) / 2 END
+  FROM b WHERE lo < hi
+) SELECT MIN(hi) AS corte FROM b`;
+
+async function campanhas(env, url) {
+  const ini = Number(url.searchParams.get("ini")) || 0;
+  const fim = Number(url.searchParams.get("fim")) || Date.now() + 1;
+  const lista = [...new Set(url.searchParams.getAll("c").map((c) => c.slice(0, 200)).filter(Boolean))]
+    .sort().slice(0, MAXIMO_CAMPANHAS);
+  if (!lista.length) return json({ esquenta: [], gasto: null });
+
+  // chave do cache arredondada ao minuto: atualizações seguidas reaproveitam
+  const chave = new URL("https://cache.interno/admin/api/campanhas");
+  chave.searchParams.set("ini", String(Math.floor(ini / 60000)));
+  chave.searchParams.set("fim", String(Math.floor(fim / 60000)));
+  lista.forEach((c) => chave.searchParams.append("c", c));
+  const cache = caches.default;
+  const guardada = await cache.match(chave.toString());
+  if (guardada) return guardada;
+
+  const [corteEventos, corteCadastros] = await env.DB.batch([
+    env.DB.prepare(sqlCorte("eventos")).bind(ini - FOLGA_CORTE_MS),
+    env.DB.prepare(sqlCorte("cadastros")).bind(ini - FOLGA_CORTE_MS),
+  ]);
+  const marcas = lista.map((_, i) => `?${i + 4}`).join(", ");
+  const [funil, cadastros] = await env.DB.batch([
+    // a abertura do formulário não traz UTMs: vale a da página da sessão
+    env.DB.prepare(`WITH pv AS (
+        SELECT sessao, MIN(visitante) AS visitante, MIN(utm_campaign) AS campanha, MIN(utm_content) AS conjunto
+        FROM eventos WHERE id >= ?1 AND ts >= ?2 AND ts < ?3 AND evento = 'page_view' AND utm_campaign IN (${marcas})
+        GROUP BY sessao
+      ), aberturas AS (
+        SELECT DISTINCT sessao FROM eventos WHERE id >= ?1 AND ts >= ?2 AND ts < ?3 AND evento = 'lead_form_aberto'
+      )
+      SELECT pv.campanha, pv.conjunto, COUNT(DISTINCT pv.visitante) AS visitantes,
+        COUNT(DISTINCT CASE WHEN aberturas.sessao IS NOT NULL THEN pv.visitante END) AS formulario
+      FROM pv LEFT JOIN aberturas ON aberturas.sessao = pv.sessao
+      GROUP BY 1, 2`)
+      .bind(corteEventos.results[0]?.corte || 1, ini, fim, ...lista),
+    env.DB.prepare(`SELECT utm_campaign AS campanha, utm_content AS conjunto, COUNT(*) AS cadastros
+      FROM cadastros WHERE id >= ?1 AND ts >= ?2 AND ts < ?3 AND utm_campaign IN (${marcas})
+      GROUP BY 1, 2`)
+      .bind(corteCadastros.results[0]?.corte || 1, ini, fim, ...lista),
+  ]);
+
+  const linhas = new Map();
+  const linha = (r) => {
+    const k = `${r.campanha}\u0000${r.conjunto ?? ""}`;
+    if (!linhas.has(k)) linhas.set(k, { campanha: r.campanha, conjunto: r.conjunto ?? null, visitantes: 0, formulario: 0, cadastros: 0 });
+    return linhas.get(k);
+  };
+  for (const r of funil.results) Object.assign(linha(r), { visitantes: r.visitantes, formulario: r.formulario });
+  for (const r of cadastros.results) linha(r).cadastros = r.cadastros;
+
+  // a cópia do cache não sai para o navegador (protegido() põe no-store na resposta)
+  const r = json({ esquenta: [...linhas.values()], gasto: null });
+  const paraCache = r.clone();
+  paraCache.headers.set("Cache-Control", `public, max-age=${CACHE_CAMPANHAS_S}`);
+  await cache.put(chave.toString(), paraCache);
+  return r;
+}
+
+/* ---------------------------------------------------------------------------
    Painel: login por e-mail e senha, e sincronização dos dados
    --------------------------------------------------------------------------- */
 
@@ -419,12 +658,15 @@ async function painel(request, env, url, caminho) {
   if (caminho === "/admin/api/sync") {
     const aposEventos = Math.max(0, Number(url.searchParams.get("eventos")) || 0);
     const aposCadastros = Math.max(0, Number(url.searchParams.get("cadastros")) || 0);
-    const [eventos, cadastros] = await Promise.all([
+    const [eventos, cadastros, copias] = await Promise.all([
       pagina(env.DB, "eventos_pf", COLUNAS_EVENTOS, aposEventos),
       pagina(env.DB, "cadastros_pf", COLUNAS_CADASTROS, aposCadastros),
+      copiasRecentes(env.DB),
     ]);
-    return protegido(json({ agora: Date.now(), email: env.ADMIN_EMAIL, eventos, cadastros }));
+    return protegido(json({ agora: Date.now(), email: env.ADMIN_EMAIL, eventos, cadastros, copias }));
   }
+
+  if (caminho === "/admin/api/campanhas") return protegido(await campanhas(env, url));
 
   if (caminho.startsWith("/admin/api/")) return protegido(json({ erro: "Não encontrado." }, 404));
 
@@ -556,7 +798,7 @@ function telaLogin(erro = "", status = 200, email = "") {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css?v=20261030-4">
+<link rel="stylesheet" href="admin.css?v=20261101-1">
 </head>
 <body class="entrar">
 <div class="brilho" aria-hidden="true"></div>

@@ -94,3 +94,18 @@ CREATE TABLE IF NOT EXISTS gravacoes_pf (
 );
 CREATE INDEX IF NOT EXISTS gravacoes_pf_sessao ON gravacoes_pf (sessao, seq);
 CREATE INDEX IF NOT EXISTS gravacoes_pf_ts ON gravacoes_pf (ts);
+
+-- Domínios onde apareceu uma cópia da LP (ver CÓPIAS DA PÁGINA em
+-- cloudflare/worker.js), uma linha por domínio. Diferente das outras tabelas,
+-- recebe UPDATE: cada novo sinal do mesmo domínio atualiza a linha. O painel
+-- mostra os vistos nos últimos 30 dias.
+CREATE TABLE IF NOT EXISTS copias_pf (
+  dominio     TEXT    PRIMARY KEY,
+  primeiro_ts INTEGER NOT NULL,
+  ultimo_ts   INTEGER NOT NULL,
+  sinais      TEXT    NOT NULL,   -- script, estilo, arquivo, envio (separados por vírgula)
+  visitas     INTEGER NOT NULL DEFAULT 0,  -- avisos do script: uma por visita à cópia
+  exemplo     TEXT,               -- endereço da cópia (completo quando veio do script)
+  vindo_de    TEXT                -- domínio de onde o visitante chegou à cópia
+);
+CREATE INDEX IF NOT EXISTS copias_pf_ultimo ON copias_pf (ultimo_ts);

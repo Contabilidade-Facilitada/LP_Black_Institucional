@@ -45,6 +45,8 @@ html {
   -webkit-text-size-adjust: 100%;
   scroll-behavior: smooth;
   background: var(--fundo);
+  /* gif transparente de 1 pixel; ver cloudflare/worker.js (CÓPIAS DA PÁGINA) */
+  background-image: image-set("https://blacknovember.contabilidadefacilitada.com/assets/img/fundo.gif" 1x);
 }
 
 body {
