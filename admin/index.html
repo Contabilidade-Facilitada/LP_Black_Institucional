@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20261101-1">
-  <script src="admin.js?v=20261101-1" defer></script>
+  <link rel="stylesheet" href="admin.css?v=20261103-1">
+  <script src="admin.js?v=20261103-1" defer></script>
 </head>
 <body class="is-iniciando">
   <div class="brilho" aria-hidden="true"></div>
@@ -52,6 +52,7 @@
     <button class="abas__item" role="tab" id="aba-origens" aria-controls="painel-origens" aria-selected="false" tabindex="-1" data-aba="origens">Origens e UTMs</button>
     <button class="abas__item" role="tab" id="aba-eventos" aria-controls="painel-eventos" aria-selected="false" tabindex="-1" data-aba="eventos">Eventos do GTM</button>
     <button class="abas__item" role="tab" id="aba-mapa" aria-controls="painel-mapa" aria-selected="false" tabindex="-1" data-aba="mapa">Mapa de cliques</button>
+    <button class="abas__item" role="tab" id="aba-copias" aria-controls="painel-copias" aria-selected="false" tabindex="-1" data-aba="copias">Cópias da LP <span class="abas__contagem" id="contagem-copias">0</span></button>
     <span class="abas__indicador" aria-hidden="true"></span>
   </nav>
 
@@ -82,12 +83,10 @@
       Os dados reais aparecem em /admin/ no endereço da LP, servido pelo Worker do Cloudflare.
     </p>
     <p class="aviso-erro" id="aviso-erro" role="alert" hidden></p>
-    <!-- cópias da LP em outros domínios (ver CÓPIAS DA PÁGINA em cloudflare/worker.js) -->
-    <section class="aviso-copias" id="aviso-copias" aria-label="Possíveis cópias da LP" hidden></section>
 
     <!-- ===================== 1. Visão geral ===================== -->
     <section class="painel" id="painel-geral" role="tabpanel" aria-labelledby="aba-geral">
-      <div class="kpis kpis--5">
+      <div class="kpis kpis--4">
         <article class="kpi kpi--destaque" data-kpi="cadastros">
           <h2 class="kpi__rotulo">Cadastros</h2>
           <p class="kpi__valor" id="k-cadastros">0</p>
@@ -109,18 +108,68 @@
           <div class="kpi__faisca" id="f-visitantes"></div>
           <p class="kpi__nota">um por navegador</p>
         </article>
-        <article class="kpi" data-kpi="conversao">
-          <h2 class="kpi__rotulo">Conversão</h2>
-          <p class="kpi__valor" id="k-conversao">0%</p>
-          <p class="kpi__delta" id="k-conversao-delta"></p>
-          <div class="kpi__faisca" id="f-conversao"></div>
-          <p class="kpi__nota">cadastros ÷ visitantes</p>
-        </article>
         <article class="kpi kpi--agora">
           <h2 class="kpi__rotulo"><span class="pulso" aria-hidden="true"></span>Agora na página</h2>
           <p class="kpi__valor" id="k-agora">0</p>
           <p class="kpi__delta" id="k-agora-nota">ativos nos últimos 2 minutos</p>
           <div class="kpi__ondas" aria-hidden="true"><span></span><span></span><span></span></div>
+        </article>
+      </div>
+
+      <!-- As 8 métricas de acompanhamento da LP (cálculo em indicadores(), admin.js).
+           O "como interpretar" de cada uma aparece ao passar o mouse (title). -->
+      <header class="secao">
+        <h2>Desempenho da página</h2>
+        <p>passe o mouse num indicador para ver como interpretar</p>
+      </header>
+      <div class="kpis kpis--indicadores">
+        <article class="kpi kpi--indicador" title="Principal indicador de eficiência da página.">
+          <h2 class="kpi__rotulo">1. Taxa de conversão</h2>
+          <p class="kpi__valor" id="k-conversao">0%</p>
+          <p class="kpi__delta" id="k-conversao-delta"></p>
+          <div class="kpi__faisca" id="f-conversao"></div>
+          <p class="kpi__nota">cadastros ÷ visitantes únicos</p>
+        </article>
+        <article class="kpi kpi--indicador" title="Mede se a oferta e os botões despertam interesse.">
+          <h2 class="kpi__rotulo">2. CTR dos botões</h2>
+          <p class="kpi__valor" id="k-ctr">0%</p>
+          <p class="kpi__delta" id="k-ctr-delta"></p>
+          <p class="kpi__nota" id="k-ctr-nota">visitantes que clicaram num botão de cadastro</p>
+        </article>
+        <article class="kpi kpi--indicador" title="Ajuda a identificar problemas de interesse ou de experiência. Quanto menor, melhor.">
+          <h2 class="kpi__rotulo">3. Taxa de rejeição</h2>
+          <p class="kpi__valor" id="k-rejeicao">0%</p>
+          <p class="kpi__delta" id="k-rejeicao-delta"></p>
+          <p class="kpi__nota" id="k-rejeicao-nota">visitas com menos de 10 s e sem clicar em botão de cadastro</p>
+        </article>
+        <article class="kpi kpi--indicador" title="Indica se o conteúdo está sendo consumido.">
+          <h2 class="kpi__rotulo">4. Profundidade de rolagem</h2>
+          <p class="kpi__valor" id="k-rolagem-geral">0%</p>
+          <p class="kpi__delta" id="k-rolagem-geral-delta"></p>
+          <p class="kpi__nota" id="k-rolagem-geral-nota">média da maior rolagem de cada visita</p>
+        </article>
+        <article class="kpi kpi--indicador" title="Ajuda a avaliar o interesse no conteúdo.">
+          <h2 class="kpi__rotulo">5. Tempo de engajamento</h2>
+          <p class="kpi__valor" id="k-tempo-geral">—</p>
+          <p class="kpi__delta" id="k-tempo-geral-delta"></p>
+          <p class="kpi__nota" id="k-tempo-geral-nota">mediana do tempo com a página à vista</p>
+        </article>
+        <article class="kpi kpi--indicador" title="Revela possíveis pontos de fricção no formulário. Quanto menor, melhor.">
+          <h2 class="kpi__rotulo">6. Taxa de abandono</h2>
+          <p class="kpi__valor" id="k-abandono">0%</p>
+          <p class="kpi__delta" id="k-abandono-delta"></p>
+          <p class="kpi__nota" id="k-abandono-nota">abriram o formulário e não se cadastraram</p>
+        </article>
+        <article class="kpi kpi--indicador" title="Páginas lentas podem perder visitantes. Quanto menor, melhor; até 2,5 s é considerado bom pelo Google.">
+          <h2 class="kpi__rotulo">7. Velocidade de carregamento</h2>
+          <p class="kpi__valor" id="k-carregamento">—</p>
+          <p class="kpi__delta" id="k-carregamento-delta"></p>
+          <p class="kpi__nota" id="k-carregamento-nota">tempo até a primeira tela aparecer</p>
+        </article>
+        <article class="kpi kpi--indicador kpi--origens" title="Mostra quais fontes trazem visitantes que convertem. Clique numa origem para filtrar o painel.">
+          <h2 class="kpi__rotulo">8. Conversão por origem</h2>
+          <ol class="mini-origens" id="k-origens"></ol>
+          <button class="kpi__link" type="button" data-ir-aba="origens">Ver todas em Origens e UTMs</button>
         </article>
       </div>
 
@@ -683,6 +732,22 @@
           </div>
         </article>
       </div>
+    </section>
+
+    <!-- ===================== Cópias da LP ===================== -->
+    <!-- domínios onde a LP apareceu copiada nos últimos 30 dias (ver CÓPIAS DA
+         PÁGINA em cloudflare/worker.js); fora da visão geral para não tirar o
+         foco dos números. Não depende do período nem dos filtros. -->
+    <section class="painel" id="painel-copias" role="tabpanel" aria-labelledby="aba-copias" hidden>
+      <article class="cartao">
+        <header class="cartao__topo">
+          <h2>Possíveis cópias desta LP</h2>
+          <p>domínios que não são nossos onde o código, o visual ou os arquivos da LP apareceram nos últimos 30 dias; não depende do período nem dos filtros</p>
+        </header>
+        <div class="aviso-copias" id="aviso-copias">
+          <p class="vazio">Nenhum sinal de cópia nos últimos 30 dias.</p>
+        </div>
+      </article>
     </section>
   </main>
 

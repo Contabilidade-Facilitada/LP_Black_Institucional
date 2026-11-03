@@ -385,6 +385,55 @@
     setInterval(lerDataLayer, 1000);
     medirRolagem();
 
+    // Velocidade de carregamento, para o painel: quando o maior elemento da
+    // primeira tela apareceu (LCP) ou, no navegador que não informa essa
+    // medida, quando surgiu o primeiro conteúdo (FCP). Vai uma vez por visita,
+    // 10 segundos depois do load ou ao sair da página, o que vier antes. Fica
+    // de fora a visita aberta em segundo plano: a espera medida não seria a
+    // de quem olhava a tela.
+    (() => {
+      if (document.visibilityState !== "visible" || !window.PerformanceObserver) return;
+      let lcp = 0;
+      let ocultaEm = Infinity;
+      if ((PerformanceObserver.supportedEntryTypes || []).includes("largest-contentful-paint")) {
+        try {
+          new PerformanceObserver((lista) => {
+            for (const e of lista.getEntries()) if (e.startTime < ocultaEm) lcp = e.startTime;
+          }).observe({ type: "largest-contentful-paint", buffered: true });
+        } catch { /* navegador sem a medida */ }
+      }
+      let medido = false;
+      function medir() {
+        if (medido) return false;
+        medido = true;
+        const fcp = performance.getEntriesByName("first-contentful-paint")[0]?.startTime || 0;
+        const valor = lcp || fcp;
+        if (!valor || valor >= ocultaEm) return false;
+        const nav = performance.getEntriesByType("navigation")[0];
+        registrar("carregamento", {
+          valor: Math.round(valor),
+          detalhe: JSON.stringify({
+            m: lcp ? "lcp" : "fcp",
+            fcp: Math.round(fcp) || undefined,
+            ttfb: nav?.responseStart ? Math.round(nav.responseStart) : undefined,
+            load: nav?.loadEventEnd ? Math.round(nav.loadEventEnd) : undefined,
+          }),
+        });
+        return true;
+      }
+      // ao sair, envia na hora: o envio geral desta saída já aconteceu
+      const aoSair = () => { if (medir()) enviar(true); };
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState !== "hidden") return;
+        ocultaEm = Math.min(ocultaEm, performance.now());
+        aoSair();
+      });
+      window.addEventListener("pagehide", aoSair);
+      const depoisDoLoad = () => setTimeout(medir, 10000);
+      if (document.readyState === "complete") depoisDoLoad();
+      else window.addEventListener("load", depoisDoLoad, { once: true });
+    })();
+
     return {
       // chamado depois do envio ao n8n; keepalive mantém o envio vivo durante
       // a troca de página para o Typeform

@@ -55,6 +55,7 @@
     engajamento: "Pulso de engajamento (a cada minuto e ao sair)",
     clique: "Clique ou toque na página (mapa de cliques)",
     gravacao: "Visita gravada para reprodução (aba Pessoas)",
+    carregamento: "Velocidade de carregamento (tempo até a primeira tela aparecer)",
     "gtm.click": "Clique (gatilho do GTM)",
     "gtm.linkClick": "Clique em link (gatilho do GTM)",
     "gtm.scrollDepth": "Rolagem (gatilho do GTM)",
@@ -226,7 +227,9 @@
     const inicio = performance.now();
     const duracao = 700;
     const passo = (agora) => {
-      const t = Math.min(1, (agora - inicio) / duracao);
+      // o horário do quadro pode vir antes de "inicio": sem o limite de baixo,
+      // o número passa por valores negativos no primeiro quadro
+      const t = Math.max(0, Math.min(1, (agora - inicio) / duracao));
       const suave = 1 - (1 - t) ** 3;
       n.textContent = formatar(de + (valor - de) * suave);
       if (t < 1) n.dataset.quadro = String(requestAnimationFrame(passo));
@@ -274,7 +277,7 @@
     // o endereço tem prioridade: é assim que um link copiado abre igual
     const hash = new URLSearchParams(location.hash.slice(1));
     if ([...hash.keys()].length) {
-      if (["geral", "campanhas", "cadastros", "pessoas", "origens", "eventos", "mapa"].includes(hash.get("aba"))) p.aba = hash.get("aba");
+      if (["geral", "campanhas", "cadastros", "pessoas", "origens", "eventos", "mapa", "copias"].includes(hash.get("aba"))) p.aba = hash.get("aba");
       p.periodo = PERIODOS.includes(hash.get("periodo")) ? hash.get("periodo") : "tudo";
       p.de = hash.get("de") || "";
       p.ate = hash.get("ate") || "";
@@ -748,7 +751,9 @@
   /* ---------------------------------------------------------
      Aba 1: visão geral
      --------------------------------------------------------- */
-  function variacao(seletor, atual, anterior, modo = "relativo") {
+  // menorMelhor: na rejeição, no abandono e no carregamento, subir é ruim
+  // (a seta continua apontando o sentido; só a cor se inverte)
+  function variacao(seletor, atual, anterior, modo = "relativo", menorMelhor = false) {
     const alvo = $(seletor);
     if (anterior === null) { alvo.replaceChildren(); return; }
     const rotulo = ROTULOS_PERIODO_ANTERIOR[prefs.periodo] || "vs período anterior";
@@ -766,7 +771,7 @@
     if (Math.abs(diferenca) < 1e-9) { alvo.textContent = `sem variação ${rotulo}`; return; }
     const sobe = diferenca > 0;
     alvo.replaceChildren(
-      el("span", { class: `seta ${sobe ? "seta--sobe" : "seta--desce"}`, "aria-label": sobe ? "aumento de" : "queda de" }, sobe ? "▲ " : "▼ "),
+      el("span", { class: `seta ${sobe ? "seta--sobe" : "seta--desce"}${menorMelhor ? " seta--invertida" : ""}`, "aria-label": sobe ? "aumento de" : "queda de" }, sobe ? "▲ " : "▼ "),
       `${textoVar} ${rotulo}`,
     );
   }
@@ -781,7 +786,6 @@
     contar("#k-cadastros", r.cadastros, fmtNum, aoVivo);
     contar("#k-acessos", r.acessos, fmtNum, aoVivo);
     contar("#k-visitantes", r.visitantes, fmtNum, aoVivo);
-    contar("#k-conversao", r.conversao, (v) => fmtPct(v), aoVivo);
     texto("#k-cadastros-nota", plural(distintos(f.cadastros, "email").size, "e-mail único", "e-mails únicos"));
     texto("#k-acessos-nota", plural(distintos(f.pvs, "sessao").size, "visita (sessão)", "visitas (sessões)"));
 
@@ -789,7 +793,6 @@
     variacao("#k-cadastros-delta", r.cadastros, a ? a.cadastros : null);
     variacao("#k-acessos-delta", r.acessos, a ? a.acessos : null);
     variacao("#k-visitantes-delta", r.visitantes, a ? a.visitantes : null);
-    variacao("#k-conversao-delta", r.conversao, a ? a.conversao : null, "pontos");
 
     // minigráficos dos indicadores, na mesma grade do período
     const grade = gradeTempo(f.inicio, f.fim, escalaDe(f.inicio, f.fim));
@@ -797,12 +800,166 @@
       faisca($(`#f-${metrica}`), { valores: valoresMetrica(metrica, f, grade), corSerie: METRICAS[metrica].cor(), animar });
     }
 
+    renderIndicadores(f, anterior, aoVivo);
     renderEvolucao(f, anterior, grade, animar);
     renderFunil(f, animar);
     renderBotoesGeral(f, animar);
     renderUltimos(f);
     renderRanking(f, animar);
     renderCalor(f, animar);
+  }
+
+  /* As 8 métricas de acompanhamento da página. Tempo, rolagem e formulário
+     seguem as mesmas regras da aba Eventos do GTM, para os números baterem.
+     - CTR dos botões: visitantes que abriram o formulário (todo botão de
+       cadastro abre o formulário) ÷ visitantes únicos.
+     - Rejeição: como no GA4, visita (sessão) sem engajamento, isto é, com
+       menos de 10 s à vista, sem abrir o formulário e sem cadastro. Visita
+       sem nenhum pulso de engajamento conta como 0 s.
+     - Abandono: visitantes que abriram o formulário e não se cadastraram ÷
+       visitantes que o abriram.
+     - Carregamento: mediana do evento "carregamento" (LCP, ou FCP no
+       navegador sem LCP; ver main.js). Até 2,5 s é "bom" para o Google. */
+  const SEGUNDOS_ENGAJADA = 10;
+  const CARREGAMENTO_BOM_MS = 2500;
+  const ORIGENS_NO_CARTAO = 4;
+
+  function indicadores(f) {
+    const visitantes = distintos(f.pvs, "visitante");
+    const engajamento = new Map(); // sessão -> maior tempo à vista e maior rolagem
+    const quemAbriu = new Set();
+    const sessoesComAcao = new Set();
+    const cargas = [];
+    for (const e of f.eventos) {
+      if (e.evento === "engajamento") {
+        const s = engajamento.get(e.sessao) || { segundos: 0, rolagem: 0 };
+        s.segundos = Math.max(s.segundos, e.valor || 0);
+        s.rolagem = Math.max(s.rolagem, parseInt(e.detalhe, 10) || 0);
+        engajamento.set(e.sessao, s);
+      } else if (e.evento === "lead_form_aberto") {
+        if (e.visitante) quemAbriu.add(e.visitante);
+        if (e.sessao) sessoesComAcao.add(e.sessao);
+      } else if (e.evento === "carregamento" && e.valor > 0) {
+        cargas.push(e.valor);
+      }
+    }
+    for (const c of f.cadastros) if (c.sessao) sessoesComAcao.add(c.sessao);
+
+    const sessoes = distintos(f.pvs, "sessao");
+    let rejeitadas = 0;
+    for (const s of sessoes) {
+      if (!sessoesComAcao.has(s) && (engajamento.get(s)?.segundos || 0) < SEGUNDOS_ENGAJADA) rejeitadas++;
+    }
+    const quemCadastrou = distintos(f.cadastros, "visitante");
+    const abandonaram = [...quemAbriu].filter((v) => !quemCadastrou.has(v)).length;
+    const medidas = [...engajamento.values()];
+    const tempos = medidas.map((m) => m.segundos);
+
+    return {
+      visitantes: visitantes.size,
+      conversao: razao(f.cadastros.length, visitantes.size),
+      clicaram: quemAbriu.size,
+      ctr: razao(quemAbriu.size, visitantes.size),
+      sessoes: sessoes.size,
+      rejeitadas,
+      rejeicao: razao(rejeitadas, sessoes.size),
+      rolagem: medidas.length ? medidas.reduce((s, m) => s + m.rolagem, 0) / medidas.length / 100 : NaN,
+      ateOFim: razao(medidas.filter((m) => m.rolagem >= 75).length, medidas.length),
+      tempo: mediana(tempos),
+      tempoMedio: tempos.length ? tempos.reduce((s, v) => s + v, 0) / tempos.length : NaN,
+      abandonaram,
+      abandono: razao(abandonaram, quemAbriu.size),
+      carregamento: mediana(cargas),
+      cargas: cargas.length,
+      cargasBoas: razao(cargas.filter((v) => v <= CARREGAMENTO_BOM_MS).length, cargas.length),
+    };
+  }
+
+  const fmtSegundos = (ms) => (Number.isFinite(ms)
+    ? `${(ms / 1000).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`
+    : "—");
+
+  function renderIndicadores(f, anterior, aoVivo) {
+    const r = indicadores(f);
+    const a = anterior ? indicadores(anterior) : null;
+    const ant = (k) => (a ? a[k] : null);
+    const pct = (v) => fmtPct(v);
+
+    contar("#k-conversao", r.conversao, pct, aoVivo);
+    variacao("#k-conversao-delta", r.conversao, ant("conversao"), "pontos");
+
+    contar("#k-ctr", r.ctr, pct, aoVivo);
+    variacao("#k-ctr-delta", r.ctr, ant("ctr"), "pontos");
+    texto("#k-ctr-nota", `${plural(r.clicaram, "visitante clicou", "visitantes clicaram")} num botão de cadastro`);
+
+    contar("#k-rejeicao", r.rejeicao, pct, aoVivo);
+    variacao("#k-rejeicao-delta", r.rejeicao, ant("rejeicao"), "pontos", true);
+    texto("#k-rejeicao-nota", r.sessoes
+      ? `${fmtNum(r.rejeitadas)} de ${plural(r.sessoes, "visita", "visitas")} com menos de 10 s e sem clicar em botão de cadastro`
+      : "visitas com menos de 10 s e sem clicar em botão de cadastro");
+
+    contar("#k-rolagem-geral", r.rolagem, (v) => fmtPct(v, 0), aoVivo);
+    variacao("#k-rolagem-geral-delta", r.rolagem, ant("rolagem"), "pontos");
+    texto("#k-rolagem-geral-nota", Number.isFinite(r.ateOFim)
+      ? `média por visita · ${fmtPct(r.ateOFim, 0)} passaram de 75% da página`
+      : "média da maior rolagem de cada visita");
+
+    contar("#k-tempo-geral", r.tempo, fmtDuracao, aoVivo);
+    variacao("#k-tempo-geral-delta", r.tempo, ant("tempo"));
+    texto("#k-tempo-geral-nota", Number.isFinite(r.tempoMedio)
+      ? `mediana com a página à vista · média ${fmtDuracao(r.tempoMedio)}`
+      : "mediana do tempo com a página à vista");
+
+    contar("#k-abandono", r.abandono, pct, aoVivo);
+    variacao("#k-abandono-delta", r.abandono, ant("abandono"), "pontos", true);
+    texto("#k-abandono-nota", r.clicaram
+      ? `não concluíram: ${fmtNum(r.abandonaram)} de ${fmtNum(r.clicaram)} que abriram o formulário`
+      : "abriram o formulário e não se cadastraram");
+
+    contar("#k-carregamento", r.carregamento, fmtSegundos, aoVivo);
+    variacao("#k-carregamento-delta", r.carregamento, a && a.cargas ? a.carregamento : null, "relativo", true);
+    texto("#k-carregamento-nota", r.cargas
+      ? `mediana até a primeira tela aparecer · ${fmtPct(r.cargasBoas, 0)} em até 2,5 s`
+      : "sem medição no período: começou na versão da LP de 03/11/2026");
+
+    renderOrigensGeral(f);
+  }
+
+  // cartão 8: conversão das origens (utm_source) com mais visitantes;
+  // clicar filtra o painel inteiro pela origem, como no ranking
+  function renderOrigensGeral(f) {
+    const grupos = new Map();
+    const grupo = (v) => {
+      let g = grupos.get(v);
+      if (!g) grupos.set(v, (g = { v, visitantes: new Set(), cadastros: 0 }));
+      return g;
+    };
+    for (const p of f.pvs) if (p.visitante) grupo(p.utm_source || "").visitantes.add(p.visitante);
+    for (const c of f.cadastros) grupo(c.utm_source || "").cadastros++;
+    const itens = [...grupos.values()]
+      .sort((x, y) => y.visitantes.size - x.visitantes.size || y.cadastros - x.cadastros)
+      .slice(0, ORIGENS_NO_CARTAO)
+      .map((g) => ({ ...g, taxa: razao(g.cadastros, g.visitantes.size) }));
+    const alvo = $("#k-origens");
+    if (!itens.length) {
+      alvo.replaceChildren(el("li", { class: "vazio" }, "Sem visitas no período."));
+      return;
+    }
+    const maior = Math.max(...itens.map((g) => (Number.isFinite(g.taxa) ? g.taxa : 0)), 1e-9);
+    alvo.replaceChildren(...itens.map((g) => {
+      const ativo = prefs.filtros.utm_source?.includes(g.v || VAZIO);
+      const botao = el("button", {
+        type: "button",
+        class: `mini-origens__item${ativo ? " is-ativo" : ""}`,
+        title: `${ativo ? "Remover este filtro" : "Filtrar o painel por esta origem"} · ${plural(g.cadastros, "cadastro", "cadastros")} de ${plural(g.visitantes.size, "visitante", "visitantes")}`,
+      },
+      el("span", { class: "mini-origens__nome" }, `${ativo ? "✓ " : ""}${g.v || "(sem UTM)"}`),
+      el("span", { class: "mini-origens__taxa" }, fmtPct(g.taxa), el("small", {}, `${fmtNum(g.visitantes.size)} vis.`)),
+      el("span", { class: "mini-origens__trilho", "aria-hidden": "true" },
+        el("span", { style: { width: `${((Number.isFinite(g.taxa) ? g.taxa : 0) / maior) * 100}%` } })));
+      botao.addEventListener("click", () => alternarFiltro("utm_source", g.v));
+      return el("li", {}, botao);
+    }));
   }
 
   function renderEvolucao(f, anterior, grade, animar) {
@@ -1726,7 +1883,9 @@
         ? (e.referencia ? `veio de ${e.referencia}` : "")
         : e.evento === "engajamento"
           ? `${fmtDuracao(e.valor)} · rolagem ${e.detalhe || 0}%`
-          : detalheLegivel(e);
+          : e.evento === "carregamento"
+            ? `primeira tela em ${fmtSegundos(e.valor)}`
+            : detalheLegivel(e);
       return el("tr", { class: novosIds.has(`e${e.id}`) ? "is-novo" : null },
         el("td", { title: fmtDataHora.format(e.ts) }, fmtHora.format(e.ts)),
         el("td", { class: "forte", title: EVENTOS[e.evento] || "" }, e.evento),
@@ -3207,6 +3366,8 @@
         setTimeout(() => p.classList.remove("is-entrando"), 1200);
       }
     });
+    // as cópias não dependem do período nem dos filtros
+    $(".filtros").hidden = aba === "copias";
     posicionarIndicador();
     esconderDica();
     render({ animar: true });
@@ -3246,6 +3407,8 @@
     else if (prefs.aba === "mapa") renderMapa(f, opcoes);
     else if (prefs.aba === "pessoas") renderPessoas(f, opcoes);
     tempoReal(aoVivo);
+    // as contagens nas abas mudam de largura e empurram as abas seguintes
+    posicionarIndicador();
   }
 
   // o que muda com o relógio, mesmo sem dado novo
@@ -3329,6 +3492,9 @@
       // gravação: 20% das visitas por sorteio e toda visita que abre o formulário (ver main.js)
       let gravada = Math.random() < 0.2;
       if (gravada) eventos.push({ ts, evento: "gravacao", ...base });
+      // carregamento (LCP): celular mais lento que computador
+      const carga = Math.round((dispositivo === "computador" ? 900 : 1600) + Math.random() ** 2 * 3500);
+      eventos.push({ ts: ate(ts + carga), evento: "carregamento", ...base, valor: carga, detalhe: JSON.stringify({ m: "lcp" }) });
       const segundos = aoVivo ? 3 : Math.round(5 + Math.random() * 240);
       eventos.push({ ts: ate(ts + segundos * 1000), evento: "engajamento", ...base, detalhe: String(Math.min(100, Math.round(Math.random() * 110))), valor: segundos });
       if (Math.random() < 0.3) eventos.push({ ts: ate(ts + 4000), evento: "gtm.scrollDepth", ...base, detalhe: sorteio(["25", "50", "75", "90"]) });
@@ -3442,9 +3608,15 @@
     const assinaturaCopias = JSON.stringify(copias);
     if (assinaturaCopias === copiasMostradas) return;
     copiasMostradas = assinaturaCopias;
+    // fica na aba Cópias da LP; a contagem na aba avisa sem tirar o foco dos números
+    const contagem = $("#contagem-copias");
+    contagem.textContent = fmtNum(copias.length);
+    contagem.classList.toggle("abas__contagem--alerta", copias.length > 0);
     const aviso = $("#aviso-copias");
-    aviso.hidden = !copias.length;
-    if (!copias.length) return;
+    if (!copias.length) {
+      aviso.replaceChildren(el("p", { class: "vazio" }, "Nenhum sinal de cópia nos últimos 30 dias."));
+      return;
+    }
     aviso.replaceChildren(
       el("p", { class: "aviso-copias__titulo" },
         el("strong", {}, copias.length === 1
@@ -3551,6 +3723,11 @@
   /* ---------------------------------------------------------
      Eventos da interface
      --------------------------------------------------------- */
+  // atalhos de um cartão para outra aba (ex.: conversão por origem)
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ir-aba]");
+    if (b) trocarAba(b.dataset.irAba);
+  });
   $(".abas").addEventListener("click", (e) => {
     const b = e.target.closest("[data-aba]");
     if (b) trocarAba(b.dataset.aba);
@@ -3564,6 +3741,9 @@
   });
   window.addEventListener("resize", posicionarIndicador);
   document.fonts?.ready.then(posicionarIndicador);
+  // o "ready" pode resolver antes de a Sora começar a baixar; medido com a
+  // fonte reserva, o traço fica deslocado nas abas mais à direita
+  document.fonts?.addEventListener?.("loadingdone", posicionarIndicador);
 
   $("#periodos").addEventListener("click", (e) => {
     const b = e.target.closest("[data-periodo]");
