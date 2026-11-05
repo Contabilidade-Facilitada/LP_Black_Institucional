@@ -358,7 +358,7 @@ function inserirVarias(db, tabela, linhas) {
 async function paginaFinal(env, url, final) {
   const modelo = await env.ASSETS.fetch(new Request(new URL("/final/", url)));
   if (!modelo.ok) return resposta(modelo.status === 404 ? 404 : 502);
-  const links = LINKS_FINAIS[final.grupo] || {};
+  const links = LINKS_FINAIS[final.pagina] || {};
 
   let pagina = new HTMLRewriter()
     .on("html", {

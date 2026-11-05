@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
-import { GRUPOS_FINAIS, LINKS_FINAIS, PAGINAS_FINAIS, TIPOS_LINK, lerPaginaFinal, linkSeguro } from "../cloudflare/finais.js";
+import { LINKS_FINAIS, PAGINAS_FINAIS, TIPOS_LINK, lerPaginaFinal, linkSeguro } from "../cloudflare/finais.js";
 import worker from "../cloudflare/worker.js";
 
 const raiz = new URL("../", import.meta.url);
@@ -65,7 +65,7 @@ test("os 4 endereços combinados com o Typeform, e nada além deles", () => {
   for (const c of ["/final/c/antecipar", "/final/a/sim", "/final/a", "/final/", "/final/final.js", "/lq/antecipar"]) {
     assert.equal(lerPaginaFinal(c), null, c);
   }
-  assert.deepEqual(Object.keys(LINKS_FINAIS).sort(), ["a", "b"]);
+  assert.deepEqual(Object.keys(LINKS_FINAIS).sort(), [...PAGINAS_FINAIS].sort());
 });
 
 test("link de botão só aceita http(s)", () => {
@@ -122,9 +122,21 @@ test("lista \"No grupo você receberá\": uma por página, com os itens do docum
   for (const p of ["a/esperar", "b/esperar"]) assert.deepEqual(itens(p), [base[0], base[2]]);
 });
 
-test("cada grupo tem os links que as páginas dele usam (vazios = pendentes)", () => {
+test("cada página tem exatamente os links dos botões dela, todos válidos (https)", () => {
   assert.deepEqual(TIPOS_LINK, ["grupo", "especialista"]);
-  for (const g of GRUPOS_FINAIS) assert.deepEqual(Object.keys(LINKS_FINAIS[g]).sort(), ["especialista", "grupo"], g);
+  assert.deepEqual(Object.keys(LINKS_FINAIS).sort(), [...PAGINAS_FINAIS].sort());
+  const blocos = blocosDoModelo();
+  for (const p of PAGINAS_FINAIS) {
+    const [, html] = blocos.find(([lista]) => lista.includes(p));
+    const tipos = [...html.matchAll(/data-link="([a-z]+)"/g)].map((m) => m[1]).sort();
+    assert.deepEqual(Object.keys(LINKS_FINAIS[p]).sort(), tipos, p);
+    for (const t of tipos) assert.match(linkSeguro(LINKS_FINAIS[p][t]), /^https:\/\//, `${p} ${t}`);
+  }
+  // os links que o time enviou, por página (o grupo muda de página para página)
+  assert.equal(LINKS_FINAIS["a/antecipar"].grupo, "https://sndflw.pro/i/black-november-2026-antecipacao");
+  assert.equal(LINKS_FINAIS["a/esperar"].grupo, "https://sndflw.pro/i/black-november-2026");
+  assert.equal(LINKS_FINAIS["b/antecipar"].grupo, "https://cfaci.me/black-november-2026-antecipacao");
+  assert.equal(LINKS_FINAIS["b/esperar"].grupo, "https://ec.cfaci.me/black-november-2026");
 });
 
 test("o modelo não sai sozinho, só pelos 4 endereços", async () => {

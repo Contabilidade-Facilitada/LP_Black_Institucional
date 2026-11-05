@@ -12,31 +12,34 @@
  *   /final/b/esperar     mais qualificado, não quer antecipar
  *
  * As quatro usam o mesmo arquivo (final/index.html). O Worker mantém só o
- * texto da página pedida (data-so-pagina) e põe nos botões os links do grupo
- * de qualificação (A ou B): a otimização do tráfego pago é feita pelo link do
- * botão, então cada grupo tem o seu.
+ * texto da página pedida (data-so-pagina) e põe nos botões os links dela,
+ * abaixo: a otimização do tráfego pago é feita pelo link do botão, então
+ * cada página tem os seus.
  *
  * O foco é levar a pessoa ao grupo de WhatsApp. Nas páginas "antecipar" o
  * botão principal é "Falar com especialista" (comercial), e o grupo vem
  * depois.
  *
  * Trocar um link aqui e publicar (push) basta: nada mais no código depende
- * deles. Link vazio deixa o botão desativado (e sem QR Code), com aviso no
- * console.
+ * deles; o QR Code de cada botão (computador) segue o link. Link vazio deixa
+ * o botão desativado e o QR Code em modo de modelo, com aviso no console.
  */
 
+// links enviados em 05/11/2026
 export const LINKS_FINAIS = {
-  a: {
-    // PENDENTE: link do grupo de WhatsApp dos leads A (0 a 78)
-    grupo: "",
-    // PENDENTE: link do especialista dos leads A (só em /final/a/antecipar)
-    especialista: "",
+  "a/antecipar": {
+    especialista: "https://ec.cfaci.me/vendas",
+    grupo: "https://sndflw.pro/i/black-november-2026-antecipacao",
   },
-  b: {
-    // PENDENTE: link do grupo de WhatsApp dos leads B (79 a 200)
-    grupo: "",
-    // PENDENTE: link do especialista dos leads B (só em /final/b/antecipar)
-    especialista: "",
+  "a/esperar": {
+    grupo: "https://sndflw.pro/i/black-november-2026",
+  },
+  "b/antecipar": {
+    especialista: "https://ec.cfaci.me/vendas",
+    grupo: "https://cfaci.me/black-november-2026-antecipacao",
+  },
+  "b/esperar": {
+    grupo: "https://ec.cfaci.me/black-november-2026",
   },
 };
 
