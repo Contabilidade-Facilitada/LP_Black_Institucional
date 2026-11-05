@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20261103-1">
-  <script src="admin.js?v=20261103-1" defer></script>
+  <link rel="stylesheet" href="admin.css?v=20261105-1">
+  <script src="admin.js?v=20261105-1" defer></script>
 </head>
 <body class="is-iniciando">
   <div class="brilho" aria-hidden="true"></div>
@@ -52,6 +52,7 @@
     <button class="abas__item" role="tab" id="aba-origens" aria-controls="painel-origens" aria-selected="false" tabindex="-1" data-aba="origens">Origens e UTMs</button>
     <button class="abas__item" role="tab" id="aba-eventos" aria-controls="painel-eventos" aria-selected="false" tabindex="-1" data-aba="eventos">Eventos do GTM</button>
     <button class="abas__item" role="tab" id="aba-mapa" aria-controls="painel-mapa" aria-selected="false" tabindex="-1" data-aba="mapa">Mapa de cliques</button>
+    <button class="abas__item" role="tab" id="aba-finais" aria-controls="painel-finais" aria-selected="false" tabindex="-1" data-aba="finais">Páginas finais <span class="abas__contagem" id="contagem-finais">0</span></button>
     <button class="abas__item" role="tab" id="aba-copias" aria-controls="painel-copias" aria-selected="false" tabindex="-1" data-aba="copias">Cópias da LP <span class="abas__contagem" id="contagem-copias">0</span></button>
     <span class="abas__indicador" aria-hidden="true"></span>
   </nav>
@@ -732,6 +733,86 @@
           </div>
         </article>
       </div>
+    </section>
+
+    <!-- ===================== Páginas finais do Typeform ===================== -->
+    <!-- /final/{a|b}/{antecipar|esperar} (ver cloudflare/finais.js). Dados da
+         tabela finais_pf, que não entra em nenhuma outra aba: os números da LP
+         continuam só da LP. Período e filtros valem aqui também (as UTMs são as
+         que o Typeform repassa na URL). Cálculo em renderFinais(), admin.js. -->
+    <section class="painel" id="painel-finais" role="tabpanel" aria-labelledby="aba-finais" hidden>
+      <div class="kpis kpis--4">
+        <article class="kpi kpi--destaque">
+          <h2 class="kpi__rotulo">Visitantes</h2>
+          <p class="kpi__valor" id="fi-visitantes">0</p>
+          <p class="kpi__nota" id="fi-visitantes-nota">nas 4 páginas finais</p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Clicaram no grupo</h2>
+          <p class="kpi__valor" id="fi-grupo">0</p>
+          <p class="kpi__nota">visitantes que tocaram no botão do WhatsApp</p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Taxa de entrada no grupo</h2>
+          <p class="kpi__valor" id="fi-taxa">0%</p>
+          <p class="kpi__nota">clicaram no grupo ÷ visitantes</p>
+        </article>
+        <article class="kpi">
+          <h2 class="kpi__rotulo">Clicaram na compra</h2>
+          <p class="kpi__valor" id="fi-compra">0</p>
+          <p class="kpi__nota">link secundário das páginas "antecipar"</p>
+        </article>
+      </div>
+
+      <header class="secao">
+        <h2>Por página</h2>
+        <p>A: 0 a 78 pontos no Typeform · B: 79 a 200 pontos</p>
+      </header>
+      <div class="finais-grade" id="finais-paginas"></div>
+
+      <article class="cartao cartao--tabela">
+        <header class="cartao__topo">
+          <h2>Por origem do lead</h2>
+          <p>pelo lead_origin que o Typeform repassa; sem ele, quem tem cadastro na LP Institucional neste navegador conta como Institucional</p>
+        </header>
+        <div class="tabela-rolagem">
+          <table class="tabela tabela--numeros" id="tabela-finais-origens">
+            <thead>
+              <tr>
+                <th scope="col">Origem</th>
+                <th scope="col" class="num">Visitantes</th>
+                <th scope="col" class="num">Grupo</th>
+                <th scope="col" class="num">Taxa</th>
+                <th scope="col" class="num">Compra</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="cartao cartao--tabela">
+        <header class="cartao__topo">
+          <h2>Acessos recentes</h2>
+          <p>os 100 mais recentes do período</p>
+        </header>
+        <div class="tabela-rolagem tabela-rolagem--alta">
+          <table class="tabela" id="tabela-finais-acessos">
+            <thead>
+              <tr>
+                <th scope="col">Quando</th>
+                <th scope="col">Página</th>
+                <th scope="col">Origem do lead</th>
+                <th scope="col">Campanha</th>
+                <th scope="col">Dispositivo</th>
+                <th scope="col" class="num">Tempo</th>
+                <th scope="col">Clicou em</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
     </section>
 
     <!-- ===================== Cópias da LP ===================== -->

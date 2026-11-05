@@ -68,7 +68,7 @@ test("agrega todos os eventos além de 10 mil linhas, por dia de Brasília, sem 
 });
 
 test("rota exige token e entrega apenas o agregado", async () => {
-  const { default: app } = await import(`data:text/javascript;base64,${Buffer.from(worker).toString("base64")}`);
+  const { default: app } = await import(new URL(`../cloudflare/worker.js?instancia=${Date.now()}`, import.meta.url).href);
   const db = banco();
   db.prepare("INSERT INTO eventos_pf VALUES (1, ?, 'page_view', 'v1', 's1', 'meta', 'cpc', 'black', 'celular')")
     .run(ms("2026-10-30T12:00:00Z"));

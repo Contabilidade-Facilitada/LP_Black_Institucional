@@ -2050,3 +2050,23 @@ body.entrar {
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .anima .linha-serie { stroke-dasharray: none; stroke-dashoffset: 0; }
 }
+
+/* ---------- Páginas finais do Typeform (aba Páginas finais) ---------- */
+/* 2 × 2 no computador: linhas = grupo (A, B), colunas = intenção */
+.finais-grade { display: grid; gap: 12px; min-width: 0; }
+@media (min-width: 760px) { .finais-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.final-cartao { display: grid; gap: 8px; align-content: start; }
+.final-cartao.is-surgindo { animation: surgir 0.55s var(--curva) both; animation-delay: calc(var(--i, 0) * 60ms + 120ms); }
+.final-cartao__topo { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
+.final-cartao__topo h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.final-cartao__endereco { color: var(--apagado); font-size: 11.5px; }
+.final-cartao__nota { margin: -4px 0 0; color: var(--apagado); font-size: 12px; }
+.final-cartao__taxa { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 0; font-size: 34px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.final-cartao__taxa span { color: var(--texto-2); font-size: 12px; font-weight: 500; }
+.final-cartao__barra { height: 6px; border-radius: 999px; background: var(--superficie-3); overflow: hidden; }
+.final-cartao__barra span { display: block; height: 100%; border-radius: inherit; background: var(--sucesso); transition: width 0.6s var(--curva); }
+.final-cartao__dados { display: grid; gap: 6px; margin: 6px 0 0; }
+.final-cartao__linha { display: flex; justify-content: space-between; gap: 12px; padding-top: 6px; border-top: 1px solid var(--linha); font-size: 13px; }
+.final-cartao__linha dt { color: var(--texto-2); }
+.final-cartao__linha dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.final-cartao__linha dd small { margin-left: 6px; color: var(--apagado); font-weight: 400; }

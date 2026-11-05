@@ -277,7 +277,7 @@
     // o endereço tem prioridade: é assim que um link copiado abre igual
     const hash = new URLSearchParams(location.hash.slice(1));
     if ([...hash.keys()].length) {
-      if (["geral", "campanhas", "cadastros", "pessoas", "origens", "eventos", "mapa", "copias"].includes(hash.get("aba"))) p.aba = hash.get("aba");
+      if (["geral", "campanhas", "cadastros", "pessoas", "origens", "eventos", "mapa", "finais", "copias"].includes(hash.get("aba"))) p.aba = hash.get("aba");
       p.periodo = PERIODOS.includes(hash.get("periodo")) ? hash.get("periodo") : "tudo";
       p.de = hash.get("de") || "";
       p.ate = hash.get("ate") || "";
@@ -335,7 +335,11 @@
     cadastros: [],
     sessoes: new Map(), // sessão -> primeiro page_view (de onde vêm UTMs, dispositivo, local)
     emails: new Map(), // e-mail -> quantos cadastros
-    ultimo: { eventos: 0, cadastros: 0 },
+    // páginas finais do Typeform (tabela finais_pf): separadas de "eventos",
+    // para não entrarem nos números da LP
+    finais: [],
+    sessoesFinais: new Map(), // sessão -> page_view da página final
+    ultimo: { eventos: 0, cadastros: 0, finais: 0 },
     desvio: 0, // diferença entre o relógio do servidor e o deste computador
     primeiroTs: Infinity, // registro mais antigo (a ordem por id não garante isso)
     carregado: false,
@@ -353,6 +357,9 @@
           dados.pageviews.push(o);
           if (o.sessao && !dados.sessoes.has(o.sessao)) dados.sessoes.set(o.sessao, o);
         }
+      } else if (tipo === "finais") {
+        dados.finais.push(o);
+        if (o.evento === "page_view" && o.sessao && !dados.sessoesFinais.has(o.sessao)) dados.sessoesFinais.set(o.sessao, o);
       } else {
         dados.cadastros.push(o);
         if (o.email) dados.emails.set(o.email, (dados.emails.get(o.email) || 0) + 1);
@@ -405,6 +412,9 @@
       pvs: dados.pageviews.filter((p) => dentro(p.ts) && passaDims(p)),
       eventos: dados.eventos.filter((e) => dentro(e.ts) && passaDims(sessaoDe(e))),
       cadastros: dados.cadastros.filter((c) => dentro(c.ts) && passaDims(c)),
+      // cliques e engajamento herdam as UTMs do page_view da mesma sessão
+      finais: dados.finais.filter((e) => dentro(e.ts)
+        && passaDims(e.evento === "page_view" ? e : dados.sessoesFinais.get(e.sessao))),
     };
   }
 
@@ -3339,6 +3349,138 @@
   /* ---------------------------------------------------------
      Abas e renderização
      --------------------------------------------------------- */
+  /* ---------------------------------------------------------
+     Páginas finais do Typeform (ver cloudflare/finais.js)
+
+     Visitantes contados por navegador (como na LP). Os cliques valem uma
+     vez por visitante e página: quem tocou duas vezes no botão conta um.
+     --------------------------------------------------------- */
+  const PAGINAS_FINAIS = [
+    { chave: "a/antecipar", nome: "A · Quer antecipar", nota: "0 a 78 pontos" },
+    { chave: "a/esperar", nome: "A · Prefere esperar", nota: "0 a 78 pontos" },
+    { chave: "b/antecipar", nome: "B · Quer antecipar", nota: "79 a 200 pontos" },
+    { chave: "b/esperar", nome: "B · Prefere esperar", nota: "79 a 200 pontos" },
+  ];
+  const NOME_PAGINA_FINAL = Object.fromEntries(PAGINAS_FINAIS.map((p) => [p.chave, p.nome]));
+
+  // lead_origin das LPs (CONFIG.identidade em assets/js/main.js de cada uma)
+  function origemFinal(pv) {
+    const o = String(pv?.lead_origin || "").toLowerCase();
+    if (o.endsWith("_frios")) return "LP Institucional";
+    if (o.endsWith("_verde")) return "Esquenta Black (verde)";
+    if (o.endsWith("_laranja")) return "Esquenta Black (laranja)";
+    if (o) return o;
+    if (pv?.visitante && visitantesComCadastro().has(pv.visitante)) return "LP Institucional (pelo navegador)";
+    return "(sem origem)";
+  }
+
+  let cacheCadastrados = { n: -1, conjunto: new Set() };
+  function visitantesComCadastro() {
+    if (cacheCadastrados.n !== dados.cadastros.length) {
+      cacheCadastrados = { n: dados.cadastros.length, conjunto: distintos(dados.cadastros, "visitante") };
+    }
+    return cacheCadastrados.conjunto;
+  }
+
+  // resumo de uma lista de linhas de finais_pf
+  function resumoFinais(lista) {
+    const pvs = lista.filter((e) => e.evento === "page_view");
+    const visitantes = distintos(pvs, "visitante");
+    const quem = (evento) => distintos(lista.filter((e) => e.evento === evento), "visitante");
+    const grupo = quem("clique_grupo");
+    const compra = quem("clique_compra");
+    // tempo por sessão: o maior envio de engajamento de cada uma
+    const tempos = new Map();
+    for (const e of lista) {
+      if (e.evento === "engajamento" && e.sessao) tempos.set(e.sessao, Math.max(tempos.get(e.sessao) || 0, e.valor || 0));
+    }
+    return {
+      acessos: pvs.length,
+      visitantes: visitantes.size,
+      grupo: grupo.size,
+      compra: compra.size,
+      taxa: visitantes.size ? grupo.size / visitantes.size : NaN,
+      taxaCompra: visitantes.size ? compra.size / visitantes.size : NaN,
+      tempoMediano: tempos.size ? mediana([...tempos.values()]) : NaN,
+    };
+  }
+
+  function renderFinais(f, { animar, aoVivo }) {
+    const total = resumoFinais(f.finais);
+    contar("#fi-visitantes", total.visitantes, fmtNum, aoVivo);
+    texto("#fi-visitantes-nota", `${plural(total.acessos, "acesso", "acessos")} nas 4 páginas finais`);
+    contar("#fi-grupo", total.grupo, fmtNum, aoVivo);
+    contar("#fi-taxa", total.taxa, (v) => fmtPct(v), aoVivo);
+    contar("#fi-compra", total.compra, fmtNum, aoVivo);
+
+    // um cartão por página, na ordem A/B × antecipar/esperar
+    $("#finais-paginas").replaceChildren(...PAGINAS_FINAIS.map((p, i) => {
+      const r = resumoFinais(f.finais.filter((e) => e.pagina === p.chave));
+      const linha = (rotulo, valor, extra) => el("div", { class: "final-cartao__linha" },
+        el("dt", {}, rotulo), el("dd", {}, valor, extra ? el("small", {}, extra) : null));
+      return el("article", { class: `cartao final-cartao${animar && !movimentoReduzido ? " is-surgindo" : ""}`, style: { "--i": String(i) } },
+        el("header", { class: "final-cartao__topo" },
+          el("h3", {}, p.nome),
+          el("code", { class: "final-cartao__endereco" }, `/final/${p.chave}`)),
+        el("p", { class: "final-cartao__nota" }, p.nota),
+        el("p", { class: "final-cartao__taxa" }, fmtPct(r.taxa), el("span", {}, "entraram no grupo")),
+        el("div", { class: "final-cartao__barra", "aria-hidden": "true" },
+          el("span", { style: { width: `${Number.isFinite(r.taxa) ? Math.round(r.taxa * 100) : 0}%` } })),
+        el("dl", { class: "final-cartao__dados" },
+          linha("Visitantes", fmtNum(r.visitantes), r.acessos !== r.visitantes ? `${fmtNum(r.acessos)} acessos` : null),
+          linha("Clicaram no grupo", fmtNum(r.grupo)),
+          p.chave.endsWith("antecipar") ? linha("Clicaram na compra", fmtNum(r.compra), Number.isFinite(r.taxaCompra) ? fmtPct(r.taxaCompra) : null) : null,
+          linha("Tempo mediano", Number.isFinite(r.tempoMediano) ? fmtDuracao(r.tempoMediano) : "—")));
+    }));
+
+    // por origem do lead
+    const porOrigem = new Map();
+    const origemDaSessao = new Map();
+    for (const e of f.finais) {
+      const pv = e.evento === "page_view" ? e : dados.sessoesFinais.get(e.sessao);
+      const origem = origemFinal(pv);
+      if (e.sessao) origemDaSessao.set(e.sessao, origem);
+      if (!porOrigem.has(origem)) porOrigem.set(origem, []);
+      porOrigem.get(origem).push(e);
+    }
+    const linhasOrigem = [...porOrigem].map(([origem, lista]) => ({ origem, ...resumoFinais(lista) }))
+      .filter((r) => r.visitantes)
+      .sort((a, b) => b.visitantes - a.visitantes);
+    const corpoOrigens = $("#tabela-finais-origens tbody");
+    corpoOrigens.replaceChildren(...(linhasOrigem.length ? linhasOrigem.map((r) => el("tr", {},
+      el("td", { class: "forte" }, r.origem),
+      el("td", { class: "num" }, fmtNum(r.visitantes)),
+      el("td", { class: "num" }, fmtNum(r.grupo)),
+      el("td", { class: "num" }, fmtPct(r.taxa)),
+      el("td", { class: "num" }, fmtNum(r.compra))))
+      : [el("tr", {}, el("td", { class: "vazio", colspan: 5 }, "Nenhum acesso às páginas finais no período."))]));
+
+    // acessos recentes: cada page_view com o que aconteceu na mesma sessão
+    const porSessao = new Map();
+    for (const e of f.finais) {
+      if (e.evento === "page_view" || !e.sessao) continue;
+      if (!porSessao.has(e.sessao)) porSessao.set(e.sessao, { grupo: false, compra: false, tempo: 0 });
+      const s = porSessao.get(e.sessao);
+      if (e.evento === "clique_grupo") s.grupo = true;
+      if (e.evento === "clique_compra") s.compra = true;
+      if (e.evento === "engajamento") s.tempo = Math.max(s.tempo, e.valor || 0);
+    }
+    const recentes = f.finais.filter((e) => e.evento === "page_view").sort((a, b) => b.ts - a.ts).slice(0, 100);
+    const corpoAcessos = $("#tabela-finais-acessos tbody");
+    corpoAcessos.replaceChildren(...(recentes.length ? recentes.map((pv) => {
+      const s = porSessao.get(pv.sessao) || {};
+      const clicou = [s.grupo ? "grupo" : null, s.compra ? "compra" : null].filter(Boolean);
+      return el("tr", { class: novosIds.has(`f${pv.id}`) ? "is-novo" : null },
+        el("td", { title: fmtDataHora.format(pv.ts) }, fmtDataCurta.format(pv.ts).replace(",", "")),
+        el("td", { class: "forte" }, NOME_PAGINA_FINAL[pv.pagina] || pv.pagina),
+        el("td", {}, origemDaSessao.get(pv.sessao) || origemFinal(pv)),
+        el("td", { title: pv.utm_campaign || "" }, pv.utm_campaign || "—"),
+        el("td", {}, capitalizar(pv.dispositivo) || "—"),
+        el("td", { class: "num" }, s.tempo ? fmtDuracao(s.tempo) : "—"),
+        el("td", {}, clicou.length ? clicou.join(" e ") : "—"));
+    }) : [el("tr", {}, el("td", { class: "vazio", colspan: 7 }, "Nenhum acesso às páginas finais no período."))]));
+  }
+
   function posicionarIndicador() {
     const ativa = $(".abas__item[aria-selected='true']");
     const indicador = $(".abas__indicador");
@@ -3406,6 +3548,8 @@
     else if (prefs.aba === "eventos") renderEventos(f, opcoes);
     else if (prefs.aba === "mapa") renderMapa(f, opcoes);
     else if (prefs.aba === "pessoas") renderPessoas(f, opcoes);
+    else if (prefs.aba === "finais") renderFinais(f, opcoes);
+    texto("#contagem-finais", fmtNum(distintos(f.finais.filter((e) => e.evento === "page_view"), "visitante").size));
     tempoReal(aoVivo);
     // as contagens nas abas mudam de largura e empurram as abas seguintes
     posicionarIndicador();
@@ -3435,8 +3579,11 @@
   const DEMO = location.protocol === "file:" || new URLSearchParams(location.search).has("demo");
 
   const demo = (() => {
-    const ids = { eventos: 0, cadastros: 0 };
+    const ids = { eventos: 0, cadastros: 0, finais: 0 };
     let sessoes = 0;
+    // páginas finais do Typeform: recolhidas aqui e entregues junto do lote
+    let finais = [];
+    let sessoesFinais = 0;
     const sorteio = (lista) => lista[Math.floor(Math.random() * lista.length)];
     const ORIGENS = [
       ["facebook", "cpc", "black_vip", "criativo_01"], ["facebook", "cpc", "black_vip", "criativo_02"],
@@ -3516,7 +3663,38 @@
         ...base, cta, ...contexto,
         url: `https://exemplo.workers.dev/${utm_source ? `?utm_source=${utm_source}` : ""}`,
       });
+      // 3 de 4 terminam o Typeform e chegam a uma página final
+      if (Math.random() < 0.75) visitaFinal(ate(tsCadastro + 90000), base.visitante, contexto, "lp_black_november_2026_frios");
     }
+
+    // visita a uma página final; quem vem da Esquenta Black chega com outro visitante
+    function visitaFinal(ts, visitante, contexto, leadOrigin) {
+      const pontuacao = Math.round(Math.random() ** 0.8 * 200);
+      const pagina = `${pontuacao <= 78 ? "a" : "b"}/${Math.random() < 0.45 ? "antecipar" : "esperar"}`;
+      const sessaoFinal = `fs${++sessoesFinais}`;
+      const base = { pagina, visitante, sessao: sessaoFinal };
+      const { utm_source, utm_medium, utm_campaign, utm_content, utm_term, dispositivo, navegador, sistema, estado, cidade, pais } = contexto;
+      finais.push({ ts, evento: "page_view", ...base, utm_source, utm_medium, utm_campaign, utm_content, utm_term,
+        lead_origin: Math.random() < 0.9 ? leadOrigin : "", pontuacao, dispositivo, navegador, sistema, estado, cidade, pais });
+      const chance = pagina.endsWith("antecipar") ? 0.62 : 0.48;
+      if (Math.random() < chance) finais.push({ ts: Math.min(ts + 8000, relogio()), evento: "clique_grupo", ...base });
+      if (pagina.endsWith("antecipar") && Math.random() < 0.12) finais.push({ ts: Math.min(ts + 12000, relogio()), evento: "clique_compra", ...base });
+      finais.push({ ts: Math.min(ts + 15000, relogio()), evento: "engajamento", ...base, valor: Math.round(4 + Math.random() * 60) });
+    }
+    function visitasEsquenta(n, desde, ate) {
+      for (let i = 0; i < n; i++) {
+        const [utm_source, utm_medium, utm_campaign, utm_content] = sorteio(ORIGENS);
+        const [estado, cidade] = sorteio(LOCAIS);
+        visitaFinal(desde + Math.random() * (ate - desde), `ve${i}x${Math.random().toString(36).slice(2, 6)}`,
+          { utm_source, utm_medium, utm_campaign, utm_content, dispositivo: "celular", navegador: "Instagram", sistema: "Android", estado, cidade, pais: "BR" },
+          sorteio(["lp_black_november_2026_verde", "lp_black_november_2026_laranja"]));
+      }
+    }
+    const pacoteFinais = () => {
+      const lista = finais;
+      finais = [];
+      return lote(lista, "finais");
+    };
 
     return {
       inicial() {
@@ -3525,14 +3703,15 @@
         const agora = relogio();
         for (let i = 0; i < 3200; i++) sessao(agora - Math.random() ** 0.7 * 6 * DIA - 120000, eventos, cadastros, false);
         for (let i = 0; i < 18; i++) sessao(agora - Math.random() * 100000, eventos, cadastros, true);
-        return { eventos: lote(eventos, "eventos"), cadastros: lote(cadastros, "cadastros") };
+        visitasEsquenta(260, agora - 6 * DIA, agora - 60000);
+        return { eventos: lote(eventos, "eventos"), cadastros: lote(cadastros, "cadastros"), finais: pacoteFinais() };
       },
       aoVivo() {
         const eventos = [];
         const cadastros = [];
         const novas = Math.floor(Math.random() * 4);
         for (let i = 0; i < novas; i++) sessao(relogio() - Math.random() * 4000, eventos, cadastros, true);
-        return { eventos: lote(eventos, "eventos"), cadastros: lote(cadastros, "cadastros") };
+        return { eventos: lote(eventos, "eventos"), cadastros: lote(cadastros, "cadastros"), finais: pacoteFinais() };
       },
     };
   })();
@@ -3543,6 +3722,7 @@
     const pacote = primeira ? demo.inicial() : demo.aoVivo();
     const eventos = absorver(pacote.eventos, "eventos");
     const cadastros = absorver(pacote.cadastros, "cadastros");
+    const finais = absorver(pacote.finais, "finais");
     dados.carregado = true;
     if (primeira) {
       document.body.classList.remove("is-iniciando");
@@ -3551,6 +3731,7 @@
       render({ animar: true });
     } else {
       eventos.forEach((e) => novosIds.add(`e${e.id}`));
+      finais.forEach((e) => novosIds.add(`f${e.id}`));
       cadastros.forEach((c) => novosIds.add(c.id));
       render({ aoVivo: true });
       novosIds.clear();
@@ -3649,7 +3830,7 @@
     const cadastrosNovos = [];
     try {
       for (let volta = 0; volta < 200; volta++) {
-        const r = await fetch(`${API}?eventos=${dados.ultimo.eventos}&cadastros=${dados.ultimo.cadastros}`, {
+        const r = await fetch(`${API}?eventos=${dados.ultimo.eventos}&cadastros=${dados.ultimo.cadastros}&finais=${dados.ultimo.finais}`, {
           cache: "no-store",
           credentials: "same-origin",
           // sessão vencida: o Worker responde 401 (ver cloudflare/worker.js)
@@ -3671,12 +3852,15 @@
         if (corpo.copias) renderCopias(corpo.copias);
         const ev = absorver(corpo.eventos, "eventos");
         const cad = absorver(corpo.cadastros, "cadastros");
-        if (ev.length || cad.length) mudou = true;
+        // Worker anterior às páginas finais: sem "finais" na resposta
+        const fin = corpo.finais ? absorver(corpo.finais, "finais") : [];
+        if (ev.length || cad.length || fin.length) mudou = true;
         if (dados.carregado) {
           cadastrosNovos.push(...cad);
           ev.forEach((e) => novosIds.add(`e${e.id}`));
+          fin.forEach((e) => novosIds.add(`f${e.id}`));
         }
-        if (corpo.eventos.completo && corpo.cadastros.completo) break;
+        if (corpo.eventos.completo && corpo.cadastros.completo && (corpo.finais?.completo ?? true)) break;
         estadoConexao("carregando", `Carregando… ${fmtNum(dados.eventos.length)} eventos`);
       }
 

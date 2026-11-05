@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 const worker = readFileSync(new URL("../cloudflare/worker.js", import.meta.url), "utf8");
-const { default: app } = await import(`data:text/javascript;base64,${Buffer.from(worker).toString("base64")}`);
+const { default: app } = await import(new URL(`../cloudflare/worker.js?instancia=${Date.now()}`, import.meta.url).href);
 const ms = (iso) => Date.parse(iso);
 
 // cache do Cloudflare (caches.default) em memória

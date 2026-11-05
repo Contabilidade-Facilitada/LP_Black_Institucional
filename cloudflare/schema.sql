@@ -3,7 +3,8 @@
 -- com as tabelas da Esquenta Black, que continuam como estão.
 --
 -- Criar uma vez: Cloudflare > Storage & Databases > D1 > lp-black > Console,
--- colar este arquivo inteiro e executar. (Ou:
+-- colar este arquivo inteiro e executar; rodar de novo depois de uma tabela
+-- nova é seguro (IF NOT EXISTS não mexe nas que já existem). (Ou:
 -- npx wrangler d1 execute lp-black --remote --file=cloudflare/schema.sql)
 --
 -- Mesmas colunas da Esquenta Black, sem "cor" (esta página não tem teste A/B).
@@ -109,3 +110,33 @@ CREATE TABLE IF NOT EXISTS copias_pf (
   vindo_de    TEXT                -- domínio de onde o visitante chegou à cópia
 );
 CREATE INDEX IF NOT EXISTS copias_pf_ultimo ON copias_pf (ultimo_ts);
+
+-- Páginas finais do Typeform (/final/{a|b}/{antecipar|esperar}, ver
+-- cloudflare/finais.js). Tabela própria: os acessos a essas páginas não
+-- entram nos números da LP (eventos_pf), nem no painel nem no Data Gateway.
+-- Só recebe INSERT; o painel sincroniza pelo id, como eventos_pf.
+-- Os campos de contexto são preenchidos só no page_view; os cliques e o
+-- engajamento se ligam a ele pela sessão.
+CREATE TABLE IF NOT EXISTS finais_pf (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts           INTEGER NOT NULL,
+  pagina       TEXT    NOT NULL,  -- a/antecipar, a/esperar, b/antecipar, b/esperar
+  evento       TEXT    NOT NULL,  -- page_view, clique_grupo, clique_compra, engajamento
+  visitante    TEXT,              -- o mesmo identificador da LP (mesmo domínio)
+  sessao       TEXT,              -- uma por abertura da página
+  valor        INTEGER,           -- engajamento: segundos com a página visível
+  referencia   TEXT,
+  utm_source   TEXT,              -- UTMs e origem repassadas pelo Typeform na URL
+  utm_medium   TEXT,
+  utm_campaign TEXT,
+  utm_content  TEXT,
+  utm_term     TEXT,
+  lead_origin  TEXT,              -- lp_black_november_2026_frios, _verde, _laranja...
+  pontuacao    INTEGER,           -- pontuação do Typeform, quando repassada
+  dispositivo  TEXT,
+  navegador    TEXT,
+  sistema      TEXT,
+  pais         TEXT,
+  estado       TEXT,
+  cidade       TEXT
+);

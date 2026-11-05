@@ -11,6 +11,8 @@
  *   POST /api/cadastro   cópia de cada cadastro da Lista VIP (público)
  *   POST /api/gravacao   partes da gravação de uma visita (público)
  *   POST /api/endereco   aviso de cópia da LP aberta em outro domínio (público)
+ *   GET  /final/{a|b}/{antecipar|esperar}  páginas finais do Typeform
+ *   POST /api/final      acessos e cliques das páginas finais (público)
  *   GET  /api/metricas-gateway agregado sem dados pessoais (token)
  *   GET  /admin/         painel (exige login)
  *   GET  /admin/api/sync dados do painel (idem)
@@ -22,7 +24,8 @@
  *
  * BANCO
  * Usa o mesmo D1 da Esquenta Black ("lp-black"), com tabelas próprias
- * (eventos_pf, cadastros_pf, gravacoes_pf, tentativas_pf): os dois painéis
+ * (eventos_pf, cadastros_pf, gravacoes_pf, tentativas_pf, finais_pf; esta
+ * última só das páginas finais, para não somar nos números da LP): os dois painéis
  * não se misturam e o Worker da Esquenta Black não precisa mudar. Criar as
  * tabelas uma vez com cloudflare/schema.sql (instruções no arquivo).
  *
@@ -61,6 +64,8 @@
  * às pressas, que são a maioria.
  */
 
+import { LINKS_FINAIS, PAGINAS_FINAIS, lerPaginaFinal, linkSeguro } from "./finais.js";
+
 // Linhas por resposta da sincronização do painel. A primeira carga pede
 // páginas seguidas até alcançar o fim; depois disso cada atualização traz só o
 // que chegou desde a anterior.
@@ -92,6 +97,16 @@ export default {
     if (caminho === "/api/endereco") {
       return receberEndereco(request, env);
     }
+
+    if (caminho === "/api/final") {
+      return receberFinal(request, env, ctx, url);
+    }
+
+    const final = lerPaginaFinal(caminho);
+    if (final) return paginaFinal(env, url, final);
+    // o modelo só sai preenchido, pelos 4 endereços acima (final.css e
+    // final.js seguem para os arquivos estáticos)
+    if (/^\/final(\/(index(\.html)?)?)?$/i.test(caminho)) return resposta(404);
 
     // pedido pelo style.css com o endereço completo (ver CÓPIAS DA PÁGINA):
     // um gif transparente de 1 pixel, nunca guardado em cache, para cada
@@ -327,6 +342,118 @@ function inserirVarias(db, tabela, linhas) {
       .prepare(`INSERT INTO ${tabela} (${colunas.join(",")}) VALUES (${colunas.map(() => "?").join(",")})`)
       .bind(...colunas.map((c) => linha[c] ?? null));
   }));
+}
+
+/* ---------------------------------------------------------------------------
+   Páginas finais do Typeform (ver cloudflare/finais.js)
+   --------------------------------------------------------------------------- */
+
+// O modelo final/index.html preenchido para o endereço pedido: atributos do
+// <html> (lidos pelo GTM e por final.js), só o bloco de texto da intenção e
+// os links do grupo de qualificação. O modelo é pedido sem os cabeçalhos do
+// navegador e a resposta sai sem ETag: os links ficam aqui, e não no
+// arquivo, então um 304 do arquivo serviria a página com o link antigo.
+async function paginaFinal(env, url, final) {
+  const modelo = await env.ASSETS.fetch(new Request(new URL("/final/", url)));
+  if (!modelo.ok) return resposta(modelo.status === 404 ? 404 : 502);
+  const links = LINKS_FINAIS[final.grupo] || {};
+  const grupo = linkSeguro(links.grupo);
+  const compra = linkSeguro(links.compra);
+
+  const pagina = new HTMLRewriter()
+    .on("html", {
+      element(el) {
+        el.setAttribute("data-grupo", final.grupo);
+        el.setAttribute("data-intencao", final.intencao);
+        el.setAttribute("data-pagina", final.pagina);
+      },
+    })
+    .on("[data-so-intencao]", {
+      element(el) {
+        if (el.getAttribute("data-so-intencao") !== final.intencao) el.remove();
+      },
+    })
+    .on("[data-link='grupo']", {
+      element(el) {
+        if (grupo) {
+          el.setAttribute("href", grupo);
+        } else {
+          // sem link ainda: botão visível, mas desativado (final.js avisa no console)
+          el.setAttribute("class", `${el.getAttribute("class") || ""} is-pendente`.trim());
+          el.setAttribute("aria-disabled", "true");
+        }
+      },
+    })
+    .on("[data-link='compra']", {
+      element(el) {
+        if (compra) el.setAttribute("href", compra);
+        else el.remove();
+      },
+    })
+    .transform(modelo);
+
+  const r = new Response(pagina.body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+  r.headers.set("Cache-Control", "no-store");
+  r.headers.set("X-Robots-Tag", "noindex, nofollow");
+  return r;
+}
+
+const EVENTOS_FINAIS = new Set(["page_view", "clique_grupo", "clique_compra", "engajamento"]);
+
+// Medição das páginas finais (final/final.js), na tabela finais_pf. As mesmas
+// travas da coleta da LP: só POST, só da própria origem, sem robôs.
+async function receberFinal(request, env, ctx, url) {
+  if (request.method !== "POST") return resposta(405);
+  if (!env.DB) return resposta(503);
+  if (envioDeFora(request, env, ctx, url)) return resposta(403);
+  const agente = request.headers.get("User-Agent") || "";
+  if (ROBOS.test(agente) || ehRoboMeta(agente) || ehRedeMeta(request)) return resposta(204);
+
+  const texto = await request.text();
+  if (texto.length > 8000) return resposta(413);
+  let dados;
+  try { dados = JSON.parse(texto); } catch { return resposta(400); }
+  if (!dados || typeof dados !== "object") return resposta(400);
+  const pagina = String(dados.p || "").toLowerCase();
+  if (!PAGINAS_FINAIS.includes(pagina)) return resposta(400);
+
+  const agora = Date.now();
+  const base = { pagina, visitante: corte(dados.v, 64), sessao: corte(dados.s, 64) };
+  const linhas = [];
+  for (const e of Array.isArray(dados.eventos) ? dados.eventos.slice(0, 20) : []) {
+    if (!e || !EVENTOS_FINAIS.has(e.e)) continue;
+    const atraso = Math.min(Math.max(Number(e.dt) || 0, 0), 600000);
+    const linha = { ts: agora - atraso, evento: e.e, ...base };
+    if (e.e === "engajamento" && Number.isFinite(Number(e.n))) {
+      linha.valor = Math.min(Math.max(Math.round(Number(e.n)), 0), 86400);
+    }
+    if (e.e === "page_view") Object.assign(linha, contextoFinal(e.ctx), ambiente(request, agente));
+    linhas.push(linha);
+  }
+  if (!linhas.length) return resposta(204);
+  try {
+    await inserirVarias(env.DB, "finais_pf", linhas);
+  } catch {
+    // sem a tabela finais_pf (schema.sql ainda não rodou)
+    return resposta(503);
+  }
+  return resposta(204);
+}
+
+function contextoFinal(ctx) {
+  const c = ctx && typeof ctx === "object" ? ctx : {};
+  const pontuacao = Number(c.pontuacao);
+  return {
+    referencia: corte(c.ref, 120),
+    utm_source: corte(c.utm_source, 150),
+    utm_medium: corte(c.utm_medium, 150),
+    utm_campaign: corte(c.utm_campaign, 200),
+    utm_content: corte(c.utm_content, 200),
+    utm_term: corte(c.utm_term, 200),
+    lead_origin: corte(c.lead_origin, 120),
+    pontuacao: c.pontuacao !== "" && c.pontuacao != null && Number.isFinite(pontuacao)
+      ? Math.min(Math.max(Math.round(pontuacao), -100000), 100000) : null,
+  };
 }
 
 /* ---------------------------------------------------------------------------
@@ -622,6 +749,12 @@ const COLUNAS_CADASTROS = [
   "utm_term", "clique", "url", "dispositivo", "navegador", "sistema", "pais",
   "estado", "cidade",
 ];
+const COLUNAS_FINAIS = [
+  "id", "ts", "pagina", "evento", "visitante", "sessao", "valor", "referencia",
+  "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+  "lead_origin", "pontuacao", "dispositivo", "navegador", "sistema", "pais",
+  "estado", "cidade",
+];
 
 const COOKIE = "cf_black_pf_painel";
 const LEMBRAR_S = 90 * 86400; // "lembrar este computador"
@@ -658,12 +791,16 @@ async function painel(request, env, url, caminho) {
   if (caminho === "/admin/api/sync") {
     const aposEventos = Math.max(0, Number(url.searchParams.get("eventos")) || 0);
     const aposCadastros = Math.max(0, Number(url.searchParams.get("cadastros")) || 0);
-    const [eventos, cadastros, copias] = await Promise.all([
+    const aposFinais = Math.max(0, Number(url.searchParams.get("finais")) || 0);
+    const [eventos, cadastros, copias, finais] = await Promise.all([
       pagina(env.DB, "eventos_pf", COLUNAS_EVENTOS, aposEventos),
       pagina(env.DB, "cadastros_pf", COLUNAS_CADASTROS, aposCadastros),
       copiasRecentes(env.DB),
+      // sem a tabela finais_pf (schema.sql ainda não rodou), vazio
+      pagina(env.DB, "finais_pf", COLUNAS_FINAIS, aposFinais)
+        .catch(() => ({ colunas: COLUNAS_FINAIS, linhas: [], completo: true })),
     ]);
-    return protegido(json({ agora: Date.now(), email: env.ADMIN_EMAIL, eventos, cadastros, copias }));
+    return protegido(json({ agora: Date.now(), email: env.ADMIN_EMAIL, eventos, cadastros, copias, finais }));
   }
 
   if (caminho === "/admin/api/campanhas") return protegido(await campanhas(env, url));
