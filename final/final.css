@@ -4,12 +4,14 @@
    CF, títulos em Squada One, texto em Sora e CTA verde. Arquivo próprio e
    pequeno: a página é curta, e o style.css da LP passa de 3 mil linhas.
 
-   Estrutura, sempre num eixo central: marca (logo e selo), topo (título e
-   apoio), ações em cartões (dois lado a lado nas páginas "antecipar", um
-   nas "esperar") e a lista "No grupo você receberá". Tudo na mesma largura
-   (--largura) e com os espaços da escala abaixo. No computador, cada botão
-   tem ao lado o ícone do QR Code do seu link, que abre numa janela
-   flutuante (ver final.js).
+   Celular e tablet: uma coluna centralizada (marca, título, cartões de
+   ação, benefícios). Computador (1024 px ou mais): tudo numa tela só, sem
+   rolar; marca e selo numa faixa no topo, título e benefícios à esquerda,
+   cartões de ação à direita. Para isso o .bloco vira "display: contents"
+   e seus filhos entram direto na grade do .final.
+
+   Os espaços saem da escala --e-*. As animações usam só transform e
+   opacity (e um brilho no botão), e somem com "reduzir movimento".
    ========================================================= */
 
 :root {
@@ -22,11 +24,12 @@
   --linha: rgba(255, 255, 255, 0.08);
   --linha-forte: rgba(255, 255, 255, 0.14);
   --linha-laranja: rgba(255, 153, 51, 0.3);
-  --gradiente-texto: linear-gradient(92deg, #ffd08a 0%, #ff9933 45%, #f26a0c 100%);
+  --gradiente-texto: linear-gradient(92deg, #ffd08a 0%, #ff9933 30%, #f26a0c 50%, #ff9933 70%, #ffd08a 100%);
   --gradiente-verde: linear-gradient(180deg, #74ff74 0%, #00ff00 42%, #00d80b 100%);
   --fonte-titulo: "Squada One", "Arial Narrow", sans-serif;
   --fonte-texto: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
   --curva-saida: cubic-bezier(0.16, 1, 0.3, 1);
+  --curva-mola: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* escala de espaços: todo intervalo da página sai daqui */
   --e-1: 8px;
@@ -35,16 +38,16 @@
   --e-4: 24px;
   --e-5: 32px;
   --e-6: 48px;
-  /* entre as partes da página (marca, bloco, lista) */
-  --secao: clamp(36px, 6vw, 56px);
+  --secao: clamp(32px, 6vw, 48px);
 
   --raio: 20px;
   --gutter: 16px;
   --largura: 920px;
 }
 @media (min-width: 640px) { :root { --gutter: 32px; } }
-/* página com uma ação só: coluna mais estreita */
+/* página com uma ação só: coluna mais estreita (no computador vale a grade) */
 [data-intencao="esperar"] { --largura: 600px; }
+@media (min-width: 1024px) { :root, [data-intencao="esperar"] { --largura: 1080px; } }
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -73,18 +76,43 @@ img, svg { display: block; max-width: 100%; height: auto; }
 strong { color: var(--texto); font-weight: 700; }
 p { margin: 0; }
 
-/* luz laranja atrás do topo, como na LP */
+/* ---------- Fundo: luz laranja que respira e duas luzes que andam devagar ---------- */
 .brilho {
   position: fixed;
   inset: -20% -10% auto;
-  height: 80vh;
+  height: 85vh;
   pointer-events: none;
   background:
     radial-gradient(50% 55% at 50% 0%, rgba(255, 153, 51, 0.2), transparent 70%),
     radial-gradient(35% 40% at 50% 10%, rgba(242, 106, 12, 0.16), transparent 70%);
+  animation: respira 7s ease-in-out infinite;
 }
+.brilho::before,
+.brilho::after {
+  content: "";
+  position: absolute;
+  width: 46vmax;
+  height: 46vmax;
+  border-radius: 50%;
+}
+.brilho::before {
+  top: 10%;
+  left: -12%;
+  background: radial-gradient(closest-side, rgba(255, 153, 51, 0.12), transparent);
+  animation: deriva-1 18s ease-in-out infinite alternate;
+}
+.brilho::after {
+  top: 30%;
+  right: -14%;
+  background: radial-gradient(closest-side, rgba(0, 255, 0, 0.06), transparent);
+  animation: deriva-2 22s ease-in-out infinite alternate;
+}
+@keyframes respira { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
+@keyframes deriva-1 { to { transform: translate(18vw, 14vh) scale(1.15); } }
+@keyframes deriva-2 { to { transform: translate(-16vw, 22vh) scale(0.9); } }
 
-/* ---------- Página: um eixo central; em tela alta, o conteúdo fica no meio ---------- */
+
+/* ---------- Página ---------- */
 .final {
   position: relative;
   flex: 1;
@@ -92,9 +120,9 @@ p { margin: 0; }
   max-width: calc(var(--largura) + 2 * var(--gutter));
   margin: 0 auto;
   padding:
-    clamp(var(--e-5), 7vh, 72px)
+    clamp(var(--e-5), 6vh, 64px)
     max(var(--gutter), env(safe-area-inset-right))
-    clamp(var(--e-6), 8vh, 80px)
+    clamp(var(--e-6), 7vh, 72px)
     max(var(--gutter), env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
@@ -119,6 +147,7 @@ p { margin: 0; }
 }
 
 .selo {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--e-1);
@@ -131,6 +160,7 @@ p { margin: 0; }
   font-weight: 600;
 }
 .selo__icone {
+  position: relative;
   width: 20px;
   height: 20px;
   padding: 3px;
@@ -141,9 +171,15 @@ p { margin: 0; }
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+  animation: estala 0.7s 0.5s var(--curva-mola) both, anel 2.6s 1.4s ease-out infinite;
+}
+@keyframes estala { from { transform: scale(0) rotate(-45deg); } to { transform: none; } }
+@keyframes anel {
+  0% { box-shadow: 0 0 0 0 rgba(0, 255, 0, 0.45); }
+  70%, 100% { box-shadow: 0 0 0 10px rgba(0, 255, 0, 0); }
 }
 
-/* ---------- Bloco da página: topo + cartões ---------- */
+/* ---------- Bloco: título + cartões ---------- */
 .bloco {
   display: grid;
   gap: clamp(var(--e-4), 4vw, 40px);
@@ -166,14 +202,27 @@ p { margin: 0; }
   text-transform: uppercase;
   text-wrap: balance;
 }
+/* o laranja do título com um brilho que percorre as letras */
 .destaque {
   background: var(--gradiente-texto);
+  background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  animation: reflexo 5s linear infinite;
 }
-/* o emoji não existe na Squada One; fica na fonte do sistema, um pouco menor */
-.emoji { font-family: system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif; font-size: 0.78em; }
+@keyframes reflexo { to { background-position: -200% 0; } }
+/* o emoji não existe na Squada One; fica na fonte do sistema e flutua */
+.emoji {
+  display: inline-block;
+  font-family: system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
+  font-size: 0.78em;
+  animation: foguete 3.2s ease-in-out infinite;
+}
+@keyframes foguete {
+  0%, 100% { transform: translate(0, 0) rotate(0); }
+  50% { transform: translate(3px, -6px) rotate(6deg); }
+}
 .topo__texto {
   max-width: 30em;
   color: var(--texto-2);
@@ -181,17 +230,19 @@ p { margin: 0; }
   text-wrap: balance;
 }
 
-/* ---------- Cartões de ação (conteúdo centralizado) ---------- */
+/* ---------- Cartões de ação ---------- */
 .cartoes {
   display: grid;
   gap: var(--e-3);
 }
-@media (min-width: 720px) {
+@media (min-width: 720px) and (max-width: 1023px) {
   .cartoes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
   .cartoes--um { grid-template-columns: minmax(0, 1fr); }
 }
 
 .cartao {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -202,11 +253,11 @@ p { margin: 0; }
   border-radius: var(--raio);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
   text-align: center;
+  transition: transform 0.5s var(--curva-saida), border-color 0.3s, box-shadow 0.5s;
   /* o texto do botão se mede pela largura do cartão (ver .botao) */
   container-type: inline-size;
 }
 @media (min-width: 640px) { .cartao { padding: var(--e-4); } }
-@media (min-width: 1000px) { .cartao { padding: var(--e-5); } }
 .cartao--destaque {
   border-color: var(--linha-laranja);
   background:
@@ -214,22 +265,40 @@ p { margin: 0; }
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
   box-shadow: 0 24px 60px -36px rgba(255, 153, 51, 0.6);
 }
+/* luz que acompanha o mouse (--mx/--my postos por final.js) */
+.cartao::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(280px circle at var(--mx, 50%) var(--my, 0%), rgba(255, 153, 51, 0.13), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+@media (hover: hover) {
+  .cartao:hover { transform: translateY(-4px); border-color: rgba(255, 153, 51, 0.45); box-shadow: 0 30px 70px -36px rgba(255, 153, 51, 0.7); }
+  .cartao:hover::before { opacity: 1; }
+}
 
 .cartao__icone {
   display: grid;
   place-items: center;
   width: 48px;
   height: 48px;
+  flex: none;
   border-radius: 15px;
   border: 1px solid var(--linha-laranja);
   background: rgba(255, 153, 51, 0.1);
   color: var(--laranja);
+  transition: transform 0.5s var(--curva-mola);
 }
+.cartao:hover .cartao__icone { transform: rotate(-8deg) scale(1.08); }
 .cartao__icone svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .cartao__icone--verde { border-color: rgba(0, 255, 0, 0.3); background: rgba(0, 255, 0, 0.07); color: var(--verde); }
 .cartao__icone--verde svg { stroke: none; }
 
-/* o texto ocupa o espaço livre: os botões dos dois cartões ficam na mesma linha */
+/* o texto ocupa o espaço livre: os botões de cartões lado a lado ficam na mesma linha */
 .cartao__texto {
   flex: 1;
   max-width: 28em;
@@ -262,6 +331,8 @@ p { margin: 0; }
   text-wrap: balance;
 }
 @media (max-width: 639px) { .alerta { border-radius: var(--e-3); } }
+/* fica dentro do grupo de cartões, logo abaixo deles, na largura toda */
+.cartoes > .alerta { grid-column: 1 / -1; }
 
 /* ---------- Botões ---------- */
 .botao {
@@ -298,9 +369,11 @@ p { margin: 0; }
 }
 .botao:active { transform: scale(0.97); }
 .botao:focus-visible { outline: 2px solid var(--laranja); outline-offset: 4px; }
-.botao__icone { width: 22px; height: 22px; flex: none; }
+.botao__icone { width: 22px; height: 22px; flex: none; transition: transform 0.5s var(--curva-mola); }
+.botao:hover .botao__icone { transform: scale(1.12) rotate(-6deg); }
 .botao__icone--traco { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
+/* botão principal: brilho que passa e luz que respira */
 .botao--whatsapp {
   color: #031a00;
   background: var(--gradiente-verde);
@@ -308,14 +381,13 @@ p { margin: 0; }
     inset 0 1px 0 rgba(255, 255, 255, 0.6),
     inset 0 -2px 0 rgba(0, 90, 0, 0.35),
     0 12px 32px -12px rgba(0, 255, 0, 0.55);
+  animation: respira-botao 2.8s 1.6s ease-in-out infinite;
 }
-.botao--whatsapp:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 -2px 0 rgba(0, 90, 0, 0.35),
-    0 18px 40px -12px rgba(0, 255, 0, 0.7);
+@keyframes respira-botao {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -2px 0 rgba(0, 90, 0, 0.35), 0 12px 32px -12px rgba(0, 255, 0, 0.55); }
+  50% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -2px 0 rgba(0, 90, 0, 0.35), 0 14px 44px -8px rgba(0, 255, 0, 0.8); }
 }
+.botao--whatsapp:hover { transform: translateY(-2px); }
 
 /* segunda ação: o grupo, ao lado do especialista */
 .botao--contorno {
@@ -323,13 +395,14 @@ p { margin: 0; }
   border: 1.5px solid rgba(0, 255, 0, 0.55);
   background: rgba(0, 255, 0, 0.04);
 }
-.botao--contorno:hover { background: rgba(0, 255, 0, 0.1); transform: translateY(-2px); }
+.botao--contorno:hover { background: rgba(0, 255, 0, 0.1); border-color: var(--verde); transform: translateY(-2px); }
 
 /* link ainda não configurado (ver cloudflare/finais.js) */
 .botao.is-pendente {
   cursor: not-allowed;
   filter: grayscale(1);
   opacity: 0.55;
+  animation: none;
 }
 
 .botao__brilho {
@@ -367,6 +440,12 @@ p { margin: 0; }
   color: var(--texto-2);
   cursor: pointer;
   transition: border-color 0.25s, background-color 0.25s, color 0.25s, transform 0.4s var(--curva-saida);
+  /* um aceno discreto, duas vezes, para mostrar que o ícone existe */
+  animation: aceno 1s 2.4s var(--curva-mola) 2;
+}
+@keyframes aceno {
+  0%, 100% { transform: none; }
+  40% { transform: scale(1.12) rotate(-6deg); }
 }
 .qr-botao[hidden] { display: none; }
 .qr-botao svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -386,15 +465,17 @@ p { margin: 0; }
   text-align: center;
   box-shadow: 0 40px 120px -20px rgba(0, 0, 0, 0.9), 0 0 80px -30px rgba(255, 153, 51, 0.5);
 }
-.qr-janela[open] { animation: qr-abre 0.45s var(--curva-saida) both; }
+.qr-janela[open] { animation: qr-abre 0.5s var(--curva-mola) both; }
 .qr-janela::backdrop {
   background: rgba(5, 4, 3, 0.72);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
 }
 .qr-janela[open]::backdrop { animation: qr-fundo 0.3s ease both; }
-@keyframes qr-abre { from { opacity: 0; transform: scale(0.88) translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes qr-abre { from { opacity: 0; transform: scale(0.82) translateY(16px); } to { opacity: 1; transform: none; } }
 @keyframes qr-fundo { from { opacity: 0; } to { opacity: 1; } }
+.qr-janela[open] .qr-janela__codigo { animation: qr-codigo 0.6s 0.12s var(--curva-mola) both; }
+@keyframes qr-codigo { from { opacity: 0; transform: scale(0.7) rotate(-4deg); } to { opacity: 1; transform: none; } }
 
 .qr-janela__fechar {
   position: absolute;
@@ -409,9 +490,9 @@ p { margin: 0; }
   background: rgba(255, 255, 255, 0.04);
   color: var(--apagado);
   cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
+  transition: color 0.2s, border-color 0.2s, transform 0.4s var(--curva-mola);
 }
-.qr-janela__fechar:hover { color: var(--texto); border-color: var(--linha-forte); }
+.qr-janela__fechar:hover { color: var(--texto); border-color: var(--linha-forte); transform: rotate(90deg); }
 .qr-janela__fechar svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 .qr-janela__titulo {
   margin: 0 0 20px;
@@ -442,70 +523,132 @@ p { margin: 0; }
 .qr-janela__modelo[hidden] { display: none; }
 .qr-janela__legenda { margin: 16px 0 0; color: var(--texto-2); font-size: 14.5px; }
 
-/* ---------- "No grupo você receberá" ---------- */
+/* ---------- "No grupo você receberá": itens compactos (ícone ao lado do texto) ---------- */
 .beneficios {
   display: grid;
-  gap: var(--e-4);
-  padding-top: var(--secao);
-  border-top: 1px solid var(--linha);
+  gap: var(--e-3);
 }
 .beneficios__titulo {
   margin: 0;
   font-family: var(--fonte-titulo);
   font-weight: 400;
-  font-size: clamp(26px, 6.4vw, 36px);
+  font-size: clamp(24px, 6vw, 30px);
   line-height: 1;
   text-align: center;
   text-transform: uppercase;
 }
-/* ícone sobre o texto, centralizados; 2 colunas no celular, 3 no computador */
 .beneficios__lista {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--e-1);
   margin: 0;
   padding: 0;
   list-style: none;
 }
-/* número ímpar de itens no celular: o último ocupa a linha inteira */
+/* número ímpar de itens: o último ocupa a linha inteira */
 .beneficios__lista li:last-child:nth-child(odd) { grid-column: 1 / -1; }
-@media (min-width: 720px) {
-  .beneficios__lista { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--e-3); }
-  .beneficios__lista--dois { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .beneficios__lista li:last-child:nth-child(odd) { grid-column: auto; }
-}
-/* ícones presos ao topo: na mesma linha da grade, ficam todos na mesma altura */
 .beneficios__lista li {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  gap: var(--e-2);
-  min-height: 116px;
-  padding: var(--e-3) var(--e-2);
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 12px;
   border: 1px solid var(--linha);
-  border-radius: var(--e-3);
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.025);
   color: var(--texto-2);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
-  line-height: 1.35;
-  text-align: center;
+  line-height: 1.3;
+  text-align: left;
   text-wrap: balance;
+  transition: border-color 0.3s, background-color 0.3s, transform 0.4s var(--curva-saida);
 }
-@media (min-width: 720px) { .beneficios__lista li { min-height: 132px; padding: 20px var(--e-3); font-size: 14.5px; } }
+.beneficios__lista li:hover { border-color: var(--linha-laranja); background: rgba(255, 153, 51, 0.05); transform: translateY(-2px); }
 .beneficios__icone {
   flex: none;
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 13px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
   border: 1px solid var(--linha-laranja);
   background: rgba(255, 153, 51, 0.08);
   color: var(--laranja);
+  transition: transform 0.5s var(--curva-mola);
 }
-.beneficios__icone svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.beneficios__lista li:hover .beneficios__icone { transform: rotate(-10deg) scale(1.1); }
+.beneficios__icone svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@media (max-width: 359px) { .beneficios__lista { grid-template-columns: minmax(0, 1fr); } }
+@media (min-width: 720px) and (max-width: 1023px) {
+  .beneficios__lista { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .beneficios__lista--dois { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .beneficios__lista li:last-child:nth-child(odd) { grid-column: auto; }
+}
+
+/* ---------- Cartão compacto: ícone ao lado do texto, botão embaixo ----------
+   Só no computador, para tudo caber numa tela. No celular e no tablet o
+   conteúdo do cartão fica centralizado, no mesmo eixo da página. */
+@media (min-width: 1024px) {
+  .cartao {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 14px;
+    row-gap: 18px;
+    text-align: left;
+  }
+  .cartao__texto { max-width: none; text-wrap: pretty; }
+  .cartao > :not(.cartao__icone) { grid-column: 2; }
+  .cartao > .acao,
+  .cartoes--um .cartao > * { grid-column: 1 / -1; }
+  .cartao__rotulo { justify-self: start; }
+  .acao { max-width: none; }
+}
+
+/* =========================================================
+   Computador: tudo numa tela só
+   ========================================================= */
+@media (min-width: 1024px) {
+  .final {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    align-content: center;
+    column-gap: clamp(40px, 5vw, 72px);
+    row-gap: var(--e-5);
+    padding-top: clamp(var(--e-4), 4vh, 48px);
+    padding-bottom: clamp(var(--e-4), 4vh, 48px);
+  }
+  .final > * { width: auto; }
+  /* o bloco some como caixa: título, cartões e alerta entram na grade */
+  .bloco { display: contents; }
+
+  /* faixa do topo: logo à esquerda, selo à direita */
+  .marca {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: var(--e-4);
+    border-bottom: 1px solid var(--linha);
+  }
+  .marca__logo { width: auto; justify-content: flex-start; }
+  .marca__logo img { width: 380px; }
+
+  .topo { grid-column: 1; grid-row: 2; justify-items: start; text-align: left; align-self: end; }
+  .topo__titulo { font-size: clamp(42px, 4vw, 56px); max-width: 12.5em; }
+  .topo__texto { max-width: 28em; }
+
+  .beneficios { grid-column: 1; grid-row: 3; align-self: start; }
+  .beneficios__titulo { text-align: left; font-size: 24px; }
+
+  /* cartões empilhados à direita (formato dos cartões: ver "Cartão compacto") */
+  .cartoes { grid-column: 2; grid-row: 2 / 4; align-self: center; gap: var(--e-3); }
+  .cartao { padding: var(--e-4); }
+
+}
 
 /* ---------- Rodapé (só no celular: no computador o logo do topo já traz as marcas) ---------- */
 .rodape {
@@ -520,13 +663,41 @@ p { margin: 0; }
 .rodape img { width: auto; height: 26px; opacity: 0.7; }
 @media (min-width: 640px) { .rodape { display: none; } }
 
-/* ---------- Entrada ---------- */
-.final > :not(dialog) { animation: entra 0.8s var(--curva-saida) both; }
-.final > :nth-child(2):not(dialog) { animation-delay: 0.06s; }
-.final > :nth-child(n + 3):not(dialog) { animation-delay: 0.12s; }
-@keyframes entra {
-  from { opacity: 0; transform: translateY(14px); }
+/* =========================================================
+   Entrada em sequência (--ordem): marca, título, apoio, cartões,
+   benefícios um a um. O título sai de um leve desfoque.
+   ========================================================= */
+.marca,
+.topo__titulo,
+.topo__texto,
+.cartao,
+.alerta,
+.beneficios__titulo,
+.beneficios__lista li {
+  /* backwards: depois da entrada, o :hover volta a mexer no transform */
+  animation: surge 0.9s var(--curva-saida) backwards;
+  animation-delay: calc(var(--ordem, 0) * 90ms + 80ms);
+}
+.marca { --ordem: 0; }
+.topo__titulo { --ordem: 1; animation-name: surge-desfocado; }
+.topo__texto { --ordem: 2; }
+.cartao:nth-child(1) { --ordem: 3; }
+.cartao:nth-child(2) { --ordem: 4; }
+.alerta { --ordem: 5; }
+.beneficios__titulo { --ordem: 5; }
+.beneficios__lista li:nth-child(1) { --ordem: 6; }
+.beneficios__lista li:nth-child(2) { --ordem: 6.6; }
+.beneficios__lista li:nth-child(3) { --ordem: 7.2; }
+.beneficios__lista li:nth-child(4) { --ordem: 7.8; }
+.beneficios__lista li:nth-child(5) { --ordem: 8.4; }
+.beneficios__lista li:nth-child(6) { --ordem: 9; }
+@keyframes surge {
+  from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: none; }
+}
+@keyframes surge-desfocado {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); filter: blur(10px); }
+  to { opacity: 1; transform: none; filter: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -120,6 +120,24 @@
     if (e.target === janela && fora) janela.close();
   });
 
+  /* ---------------- Luz que acompanha o mouse nos cartões (computador) ----------------
+     Só atualiza --mx/--my do cartão (ver .cartao::before em final.css);
+     uma vez por quadro, e nada com "reduzir movimento" ou tela de toque. */
+  const semMovimento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!semMovimento && window.matchMedia("(hover: hover)").matches) {
+    let quadro = 0;
+    document.addEventListener("pointermove", (e) => {
+      const cartao = e.target instanceof Element ? e.target.closest(".cartao") : null;
+      if (!cartao || quadro) return;
+      quadro = requestAnimationFrame(() => {
+        quadro = 0;
+        const r = cartao.getBoundingClientRect();
+        cartao.style.setProperty("--mx", `${e.clientX - r.left}px`);
+        cartao.style.setProperty("--my", `${e.clientY - r.top}px`);
+      });
+    }, { passive: true });
+  }
+
   /* ---------------- Medição ---------------- */
   const ler = (chave, tipo) => {
     try { return JSON.parse(tipo.getItem(chave)); } catch { return null; }
