@@ -92,8 +92,15 @@ test("cada página tem exatamente um bloco de texto; nas \"antecipar\" o especia
     assert.equal(/data-link="especialista"/.test(html), antecipar, `${p}: especialista`);
     if (antecipar) assert.ok(html.indexOf('data-link="especialista"') < html.indexOf('data-link="grupo"'), p);
   }
-  // um QR Code só, fora dos blocos (vale para as 4 páginas)
-  assert.equal(modelo.match(/<figure class="qr" data-qr hidden>/g)?.length, 1);
+  // cada botão com link tem ao lado o ícone do QR Code do mesmo link
+  const acoes = [...modelo.matchAll(/<div class="acao">([\s\S]*?)<\/div>/g)].map((m) => m[1]);
+  assert.equal(acoes.length, (modelo.match(/<a [^>]*data-link=/g) || []).length);
+  for (const a of acoes) {
+    const tipo = a.match(/data-link="([a-z]+)"/)[1];
+    assert.match(a, new RegExp(`<button class="qr-botao" type="button" data-qr-para="${tipo}"[^>]* hidden>`), tipo);
+  }
+  // uma janela flutuante só, preenchida na hora do clique
+  assert.equal((modelo.match(/<dialog class="qr-janela"/g) || []).length, 1);
   // nenhum link pronto no modelo: todos vêm de cloudflare/finais.js
   assert.doesNotMatch(modelo, /<a [^>]*data-link="[^"]+"[^>]*href=/);
   assert.match(modelo, /No grupo você receberá:/);
@@ -142,6 +149,7 @@ test("acesso e cliques vão para finais_pf, sem tocar nas tabelas da LP", async 
         ctx: { utm_source: "meta", utm_campaign: "bfn_black", lead_origin: "lp_black_november_2026_frios", pontuacao: "131", ref: "3rng23rvpr3.typeform.com" },
       },
       { e: "clique_especialista", dt: 0 },
+      { e: "qr_grupo", dt: 0 },
       { e: "clique_grupo", dt: 0 },
       { e: "engajamento", n: 42.4, dt: 0 },
       // fora da lista: ignorado
@@ -152,7 +160,7 @@ test("acesso e cliques vão para finais_pf, sem tocar nas tabelas da LP", async 
   assert.equal(r.status, 204);
 
   const gravadas = linhas(env.DB, "finais_pf");
-  assert.deepEqual(gravadas.map((l) => l.evento), ["page_view", "clique_especialista", "clique_grupo", "engajamento"]);
+  assert.deepEqual(gravadas.map((l) => l.evento), ["page_view", "clique_especialista", "qr_grupo", "clique_grupo", "engajamento"]);
   assert.ok(gravadas.every((l) => l.pagina === "b/antecipar" && l.visitante === "vis-1" && l.sessao === "ses-1"));
   const pv = gravadas[0];
   assert.equal(pv.utm_source, "meta");
@@ -160,7 +168,7 @@ test("acesso e cliques vão para finais_pf, sem tocar nas tabelas da LP", async 
   assert.equal(pv.lead_origin, "lp_black_november_2026_frios");
   assert.equal(pv.pontuacao, 131);
   assert.equal(pv.dispositivo, "celular");
-  assert.equal(gravadas[3].valor, 42);
+  assert.equal(gravadas[4].valor, 42);
   // contexto só no page_view
   assert.equal(gravadas[1].utm_source, null);
 

@@ -394,7 +394,8 @@ async function paginaFinal(env, url, final) {
   return r;
 }
 
-const EVENTOS_FINAIS = new Set(["page_view", "engajamento", ...TIPOS_LINK.map((t) => `clique_${t}`)]);
+// cliques nos botões e aberturas do QR Code de cada link (só no computador)
+const EVENTOS_FINAIS = new Set(["page_view", "engajamento", ...TIPOS_LINK.flatMap((t) => [`clique_${t}`, `qr_${t}`])]);
 
 // Medição das páginas finais (final/final.js), na tabela finais_pf. As mesmas
 // travas da coleta da LP: só POST, só da própria origem, sem robôs.

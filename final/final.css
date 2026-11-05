@@ -5,8 +5,8 @@
    pequeno: a página é curta, e o style.css da LP passa de 3 mil linhas.
 
    Estrutura: topo centralizado (título e apoio), ações em cartões (dois
-   lado a lado nas páginas "antecipar", um nas "esperar"), QR Code do grupo
-   (só no computador) e a lista "No grupo você receberá". Tudo na mesma
+   lado a lado nas páginas "antecipar", um nas "esperar"), QR Code de cada link
+   (ícone ao lado de cada botão, só no computador) e a lista "No grupo você receberá". Tudo na mesma
    largura (--largura), para as bordas ficarem alinhadas.
    ========================================================= */
 
@@ -300,29 +300,99 @@ strong { color: var(--texto); font-weight: 700; }
   85%, 100% { transform: translateX(130%); }
 }
 
-/* ---------- QR Code do grupo (só no computador, ver final.js) ---------- */
-.qr {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 20px;
+/* ---------- Botão + ícone de QR Code (o ícone só no computador, ver final.js) ---------- */
+.acao {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
   width: 100%;
-  max-width: 460px;
-  margin: -8px 0 0;
-  padding: 14px 22px 14px 14px;
-  border: 1px dashed var(--linha-forte);
-  border-radius: var(--raio);
 }
-.qr[hidden] { display: none; }
-.qr__codigo {
-  width: 96px;
-  padding: 5px;
-  border-radius: 10px;
+.acao .botao { flex: 1; min-width: 0; }
+.qr-botao {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 60px;
+  border: 1.5px solid var(--linha-forte);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--texto-2);
+  cursor: pointer;
+  transition: border-color 0.25s, background-color 0.25s, color 0.25s, transform 0.4s var(--curva-saida);
+}
+.qr-botao[hidden] { display: none; }
+.qr-botao svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.qr-botao:hover { border-color: var(--laranja); color: var(--laranja); background: rgba(255, 153, 51, 0.08); transform: translateY(-2px); }
+.qr-botao:focus-visible { outline: 2px solid var(--laranja); outline-offset: 3px; }
+
+/* ---------- Janela flutuante com o QR Code ampliado ---------- */
+.qr-janela {
+  width: min(360px, calc(100vw - 32px));
+  padding: 36px 32px 28px;
+  border: 1px solid var(--linha-laranja);
+  border-radius: 28px;
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(255, 153, 51, 0.16), transparent 65%),
+    #0d0a08;
+  color: var(--texto);
+  text-align: center;
+  box-shadow: 0 40px 120px -20px rgba(0, 0, 0, 0.9), 0 0 80px -30px rgba(255, 153, 51, 0.5);
+}
+.qr-janela[open] { animation: qr-abre 0.45s var(--curva-saida) both; }
+.qr-janela::backdrop {
+  background: rgba(5, 4, 3, 0.72);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.qr-janela[open]::backdrop { animation: qr-fundo 0.3s ease both; }
+@keyframes qr-abre { from { opacity: 0; transform: scale(0.88) translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes qr-fundo { from { opacity: 0; } to { opacity: 1; } }
+
+.qr-janela__fechar {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--linha);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--apagado);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.qr-janela__fechar:hover { color: var(--texto); border-color: var(--linha-forte); }
+.qr-janela__fechar svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.qr-janela__titulo {
+  margin: 0 0 20px;
+  font-family: var(--fonte-titulo);
+  font-size: 28px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.qr-janela__codigo {
+  width: 232px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 12px;
+  border-radius: 18px;
   background: #fff;
 }
-.qr__codigo svg { width: 100%; height: auto; }
-.qr__legenda { color: var(--apagado); font-size: 13.5px; line-height: 1.45; }
-.qr__legenda strong { display: block; color: var(--texto); font-size: 14.5px; }
+.qr-janela__codigo svg { width: 100%; height: auto; }
+.qr-janela__modelo {
+  margin: 14px auto 0;
+  padding: 6px 12px;
+  width: fit-content;
+  border: 1px solid var(--linha-laranja);
+  border-radius: 999px;
+  color: var(--laranja);
+  font-size: 12px;
+  font-weight: 600;
+}
+.qr-janela__modelo[hidden] { display: none; }
+.qr-janela__legenda { margin: 16px 0 0; color: var(--texto-2); font-size: 14.5px; }
 
 /* ---------- "No grupo você receberá" ---------- */
 .beneficios {
@@ -394,10 +464,10 @@ strong { color: var(--texto); font-weight: 700; }
 @media (min-width: 640px) { .rodape { display: none; } }
 
 /* ---------- Entrada ---------- */
-.final > * { animation: entra 0.8s var(--curva-saida) both; }
+.final > :not(dialog) { animation: entra 0.8s var(--curva-saida) both; }
 .final > :nth-child(2) { animation-delay: 0.05s; }
 .final > :nth-child(3) { animation-delay: 0.1s; }
-.final > :nth-child(n + 4) { animation-delay: 0.15s; }
+.final > :nth-child(n + 4):not(dialog) { animation-delay: 0.15s; }
 @keyframes entra {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
