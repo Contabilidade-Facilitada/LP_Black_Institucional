@@ -77,7 +77,7 @@ test("link de botão só aceita http(s)", () => {
 
 // blocos com data-so-pagina, na ordem do modelo: [lista de páginas, html do bloco]
 function blocosDoModelo() {
-  return [...modelo.matchAll(/<section class="conteudo" data-so-pagina="([^"]+)"[\s\S]*?<\/section>/g)]
+  return [...modelo.matchAll(/<section class="bloco" data-so-pagina="([^"]+)"[\s\S]*?<\/section>/g)]
     .map((m) => [m[1].split(/\s+/), m[0]]);
 }
 
@@ -88,11 +88,12 @@ test("cada página tem exatamente um bloco de texto; nas \"antecipar\" o especia
     assert.equal(dela.length, 1, p);
     const [, html] = dela[0];
     assert.match(html, /data-link="grupo"/, `${p}: botão do grupo`);
-    assert.match(html, /data-qr/, `${p}: QR Code`);
     const antecipar = p.endsWith("antecipar");
     assert.equal(/data-link="especialista"/.test(html), antecipar, `${p}: especialista`);
     if (antecipar) assert.ok(html.indexOf('data-link="especialista"') < html.indexOf('data-link="grupo"'), p);
   }
+  // um QR Code só, fora dos blocos (vale para as 4 páginas)
+  assert.equal(modelo.match(/<figure class="qr" data-qr hidden>/g)?.length, 1);
   // nenhum link pronto no modelo: todos vêm de cloudflare/finais.js
   assert.doesNotMatch(modelo, /<a [^>]*data-link="[^"]+"[^>]*href=/);
   assert.match(modelo, /No grupo você receberá:/);
@@ -102,7 +103,7 @@ test("cada página tem exatamente um bloco de texto; nas \"antecipar\" o especia
 
 test("lista \"No grupo você receberá\": uma por página, com os itens do documento", () => {
   const listas = [...modelo.matchAll(/<ul class="beneficios__lista[^"]*" data-so-pagina="([^"]+)">([\s\S]*?)<\/ul>/g)]
-    .map((m) => [m[1].split(/\s+/), [...m[2].matchAll(/<\/svg>([^<]+)<\/li>/g)].map((i) => i[1])]);
+    .map((m) => [m[1].split(/\s+/), [...m[2].matchAll(/<\/span>([^<]+)<\/li>/g)].map((i) => i[1])]);
   const itens = (p) => {
     const dela = listas.filter(([lista]) => lista.includes(p));
     assert.equal(dela.length, 1, p);

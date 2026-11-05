@@ -3,10 +3,16 @@
    Mesma identidade da LP (assets/css/style.css): preto profundo, laranja
    CF, títulos em Squada One, texto em Sora e CTA verde. Arquivo próprio e
    pequeno: a página é curta, e o style.css da LP passa de 3 mil linhas.
+
+   Estrutura: topo centralizado (título e apoio), ações em cartões (dois
+   lado a lado nas páginas "antecipar", um nas "esperar"), QR Code do grupo
+   (só no computador) e a lista "No grupo você receberá". Tudo na mesma
+   largura (--largura), para as bordas ficarem alinhadas.
    ========================================================= */
 
 :root {
   --fundo: #050403;
+  --superficie: #0d0a08;
   --texto: #f6f1ea;
   --texto-2: #e3d8cc;
   --apagado: #a89b8e;
@@ -14,16 +20,20 @@
   --laranja-forte: #f26a0c;
   --verde: #00ff00;
   --linha: rgba(255, 255, 255, 0.08);
-  --linha-laranja: rgba(255, 153, 51, 0.24);
+  --linha-forte: rgba(255, 255, 255, 0.14);
+  --linha-laranja: rgba(255, 153, 51, 0.3);
   --gradiente-texto: linear-gradient(92deg, #ffd08a 0%, #ff9933 45%, #f26a0c 100%);
   --gradiente-verde: linear-gradient(180deg, #74ff74 0%, #00ff00 42%, #00d80b 100%);
   --fonte-titulo: "Squada One", "Arial Narrow", sans-serif;
   --fonte-texto: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
   --curva-saida: cubic-bezier(0.16, 1, 0.3, 1);
-  --curva-mola: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --raio: 20px;
   --gutter: 16px;
+  --largura: 920px;
 }
 @media (min-width: 640px) { :root { --gutter: 24px; } }
+/* página com uma ação só: coluna mais estreita */
+[data-intencao="esperar"] { --largura: 640px; }
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -49,8 +59,9 @@ body {
 
 img, svg { display: block; max-width: 100%; height: auto; }
 .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+strong { color: var(--texto); font-weight: 700; }
 
-/* luz laranja atrás do conteúdo, como no topo da LP */
+/* luz laranja atrás do topo, como na LP */
 .brilho {
   position: fixed;
   inset: -20% -10% auto;
@@ -65,26 +76,28 @@ img, svg { display: block; max-width: 100%; height: auto; }
   position: relative;
   flex: 1;
   width: 100%;
-  max-width: 680px;
+  max-width: calc(var(--largura) + 2 * var(--gutter));
   margin: 0 auto;
-  padding: clamp(32px, 6vh, 64px) var(--gutter) 40px;
+  padding: clamp(28px, 6vh, 56px) var(--gutter) 48px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  text-align: center;
-  gap: 24px;
+  gap: 28px;
 }
+@media (min-width: 760px) { .final { gap: 36px; } }
 
-.final__logo img { width: min(100%, 520px); }
-@media (max-width: 639px) { .final__logo img { width: min(56vw, 220px); } }
+/* o <img> tem width="1500": sem o flex, o <picture> fica com essa largura e o logo encosta à esquerda */
+.final__logo { display: flex; justify-content: center; width: 100%; }
+.final__logo img { width: min(100%, 480px); }
+@media (max-width: 639px) { .final__logo img { width: min(56vw, 210px); } }
 
 /* ---------- Selo de confirmação ---------- */
 .selo {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin: 0;
-  padding: 8px 14px 8px 10px;
+  margin: -12px 0 -8px;
+  padding: 7px 14px 7px 8px;
   border: 1px solid var(--linha-laranja);
   border-radius: 999px;
   background: rgba(255, 153, 51, 0.08);
@@ -105,19 +118,25 @@ img, svg { display: block; max-width: 100%; height: auto; }
   stroke-linejoin: round;
 }
 
-/* ---------- Texto ---------- */
-.conteudo {
+/* ---------- Bloco da página: topo + cartões ---------- */
+.bloco {
   display: grid;
-  justify-items: center;
-  gap: 16px;
+  gap: 28px;
   width: 100%;
 }
-.conteudo__titulo {
-  margin: 0 0 4px;
-  max-width: 15em;
+
+.topo {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.topo__titulo {
+  margin: 0;
+  max-width: 14em;
   font-family: var(--fonte-titulo);
   font-weight: 400;
-  font-size: clamp(34px, 8.4vw, 54px);
+  font-size: clamp(34px, 7.6vw, 56px);
   line-height: 1;
   text-transform: uppercase;
   text-wrap: balance;
@@ -130,31 +149,82 @@ img, svg { display: block; max-width: 100%; height: auto; }
 }
 /* o emoji não existe na Squada One; fica na fonte do sistema, um pouco menor */
 .emoji { font-family: system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif; font-size: 0.78em; }
-.conteudo__texto {
+.topo__texto {
   margin: 0;
-  max-width: 34em;
+  max-width: 32em;
   color: var(--texto-2);
-  font-size: clamp(15px, 3.8vw, 17px);
+  font-size: clamp(15px, 3.8vw, 17.5px);
+  text-wrap: balance;
+}
+
+/* ---------- Cartões de ação ---------- */
+.cartoes {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+@media (min-width: 760px) {
+  .cartoes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  .cartoes--um { grid-template-columns: minmax(0, 1fr); }
+}
+
+.cartao {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+  padding: 22px 20px 20px;
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+  text-align: left;
+}
+@media (min-width: 640px) { .cartao { padding: 28px 28px 26px; } }
+.cartao--destaque {
+  border-color: var(--linha-laranja);
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(255, 153, 51, 0.14), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+  box-shadow: 0 24px 60px -36px rgba(255, 153, 51, 0.6);
+}
+
+.cartao__icone {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--linha-laranja);
+  background: rgba(255, 153, 51, 0.1);
+  color: var(--laranja);
+}
+.cartao__icone svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cartao__icone--verde { border-color: rgba(0, 255, 0, 0.3); background: rgba(0, 255, 0, 0.07); color: var(--verde); }
+.cartao__icone--verde svg { stroke: none; }
+
+/* o texto ocupa o espaço livre: os botões dos dois cartões ficam na mesma linha */
+.cartao__texto {
+  flex: 1;
+  margin: 0;
+  color: var(--texto-2);
+  font-size: 15.5px;
   text-wrap: pretty;
 }
-.conteudo__texto strong { color: var(--texto); }
-.conteudo__texto--separado { margin-top: 12px; }
+.cartao__rotulo { margin: 0; color: var(--laranja); font-size: 14px; font-weight: 700; letter-spacing: 0.02em; }
+.cartao__chamada { margin: 4px 0 0; color: var(--texto); font-size: 15.5px; font-weight: 700; }
 
 .alerta {
   margin: 0;
-  max-width: 34em;
-  padding: 12px 16px;
+  justify-self: center;
+  padding: 12px 18px;
   border: 1px solid var(--linha-laranja);
-  border-radius: 14px;
+  border-radius: 999px;
   background: rgba(255, 153, 51, 0.07);
-  color: var(--texto);
-  font-size: 14.5px;
+  font-size: 14px;
+  text-align: center;
 }
-/* aviso com título, nas páginas "esperar" */
-.alerta--bloco { display: grid; gap: 6px; padding: 16px 18px; color: var(--texto-2); font-size: 15px; text-align: left; }
-.alerta--bloco p { margin: 0; }
-.alerta--bloco strong { color: var(--texto); }
-.alerta__titulo { color: var(--laranja); font-weight: 700; }
+@media (max-width: 639px) { .alerta { border-radius: 16px; } }
 
 /* ---------- Botões ---------- */
 .botao {
@@ -165,14 +235,15 @@ img, svg { display: block; max-width: 100%; height: auto; }
   justify-content: center;
   gap: 0.6em;
   width: 100%;
-  max-width: 420px;
-  padding: 20px 24px;
+  min-height: 60px;
+  padding: 16px 20px;
   border-radius: 999px;
   overflow: hidden;
-  font-size: clamp(14px, 4vw, 16.5px);
+  font-size: clamp(13.5px, 3.8vw, 15.5px);
   font-weight: 800;
   letter-spacing: 0.03em;
   line-height: 1.1;
+  text-align: center;
   text-transform: uppercase;
   text-decoration: none;
   cursor: pointer;
@@ -190,23 +261,20 @@ img, svg { display: block; max-width: 100%; height: auto; }
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.6),
     inset 0 -2px 0 rgba(0, 90, 0, 0.35),
-    0 12px 32px -10px rgba(0, 255, 0, 0.55),
-    0 0 70px -18px rgba(0, 255, 0, 0.5);
-  animation: pulso 2.6s 1.2s ease-in-out infinite;
+    0 12px 32px -12px rgba(0, 255, 0, 0.55);
 }
 .botao--whatsapp:hover {
   transform: translateY(-2px);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.7),
     inset 0 -2px 0 rgba(0, 90, 0, 0.35),
-    0 18px 40px -10px rgba(0, 255, 0, 0.7),
-    0 0 90px -12px rgba(0, 255, 0, 0.65);
+    0 18px 40px -12px rgba(0, 255, 0, 0.7);
 }
 
-/* segunda ação da página B·antecipar: o grupo, depois do especialista */
+/* segunda ação: o grupo, ao lado do especialista */
 .botao--contorno {
   color: var(--verde);
-  border: 1.5px solid rgba(0, 255, 0, 0.6);
+  border: 1.5px solid rgba(0, 255, 0, 0.55);
   background: rgba(0, 255, 0, 0.04);
 }
 .botao--contorno:hover { background: rgba(0, 255, 0, 0.1); transform: translateY(-2px); }
@@ -216,7 +284,6 @@ img, svg { display: block; max-width: 100%; height: auto; }
   cursor: not-allowed;
   filter: grayscale(1);
   opacity: 0.55;
-  animation: none;
 }
 
 .botao__brilho {
@@ -227,53 +294,41 @@ img, svg { display: block; max-width: 100%; height: auto; }
   transform: translateX(-130%);
   animation: brilho-botao 4.2s ease-in-out infinite;
 }
-
+.botao.is-pendente .botao__brilho { animation: none; }
 @keyframes brilho-botao {
   0%, 55% { transform: translateX(-130%); }
   85%, 100% { transform: translateX(130%); }
 }
-@keyframes pulso {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.025); }
-}
 
-/* ---------- Botão do grupo + QR Code (o QR só no computador, ver final.js) ---------- */
-.acao-grupo {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  width: 100%;
-}
+/* ---------- QR Code do grupo (só no computador, ver final.js) ---------- */
 .qr {
   display: grid;
-  justify-items: center;
-  gap: 8px;
-  margin: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 460px;
+  margin: -8px 0 0;
+  padding: 14px 22px 14px 14px;
+  border: 1px dashed var(--linha-forte);
+  border-radius: var(--raio);
 }
 .qr[hidden] { display: none; }
 .qr__codigo {
-  width: 132px;
-  padding: 6px;
-  border-radius: 12px;
+  width: 96px;
+  padding: 5px;
+  border-radius: 10px;
   background: #fff;
 }
 .qr__codigo svg { width: 100%; height: auto; }
-.qr figcaption { color: var(--apagado); font-size: 12px; line-height: 1.3; }
-@media (min-width: 960px) {
-  .acao-grupo { flex-direction: row; justify-content: center; align-items: center; gap: 24px; }
-  .acao-grupo .botao { flex: 0 1 380px; }
-  /* QR à direita do botão, com a legenda ao lado do código */
-  .qr { grid-template-columns: auto 92px; align-items: center; justify-items: start; gap: 12px; text-align: left; }
-  .qr__codigo { width: 104px; }
-}
+.qr__legenda { color: var(--apagado); font-size: 13.5px; line-height: 1.45; }
+.qr__legenda strong { display: block; color: var(--texto); font-size: 14.5px; }
 
-/* ---------- Dobra 2: o que tem no grupo ---------- */
+/* ---------- "No grupo você receberá" ---------- */
 .beneficios {
   display: grid;
-  gap: 16px;
+  gap: 18px;
   width: 100%;
-  margin-top: 24px;
   padding-top: 32px;
   border-top: 1px solid var(--linha);
 }
@@ -283,49 +338,46 @@ img, svg { display: block; max-width: 100%; height: auto; }
   font-weight: 400;
   font-size: clamp(26px, 6vw, 34px);
   line-height: 1;
+  text-align: center;
   text-transform: uppercase;
 }
 .beneficios__lista {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
-  text-align: left;
 }
 @media (min-width: 760px) {
   .beneficios__lista { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .beneficios__lista--dois { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 440px; margin-inline: auto; width: 100%; }
+  .beneficios__lista--dois { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .beneficios__lista li {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px;
+  gap: 14px;
+  min-height: 72px;
+  padding: 14px 16px;
   border: 1px solid var(--linha);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.025);
   color: var(--texto-2);
   font-size: 14.5px;
   font-weight: 500;
+  line-height: 1.35;
 }
-@media (min-width: 760px) {
-  .beneficios__lista li { flex-direction: column; align-items: flex-start; }
-}
-.beneficios__lista svg {
+.beneficios__icone {
   flex: none;
+  display: grid;
+  place-items: center;
   width: 40px;
   height: 40px;
-  padding: 9px;
   border-radius: 12px;
   border: 1px solid var(--linha-laranja);
   background: rgba(255, 153, 51, 0.08);
-  fill: none;
-  stroke: var(--laranja);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  color: var(--laranja);
 }
+.beneficios__icone svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ---------- Rodapé ---------- */
 .rodape {
@@ -343,9 +395,9 @@ img, svg { display: block; max-width: 100%; height: auto; }
 
 /* ---------- Entrada ---------- */
 .final > * { animation: entra 0.8s var(--curva-saida) both; }
-.final > :nth-child(2) { animation-delay: 0.06s; }
-.final > :nth-child(3) { animation-delay: 0.12s; }
-.final > :nth-child(4) { animation-delay: 0.18s; }
+.final > :nth-child(2) { animation-delay: 0.05s; }
+.final > :nth-child(3) { animation-delay: 0.1s; }
+.final > :nth-child(n + 4) { animation-delay: 0.15s; }
 @keyframes entra {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
