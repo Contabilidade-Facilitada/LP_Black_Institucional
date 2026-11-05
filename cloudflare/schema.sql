@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS finais_pf (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   ts           INTEGER NOT NULL,
   pagina       TEXT    NOT NULL,  -- a/antecipar, a/esperar, b/antecipar, b/esperar
-  evento       TEXT    NOT NULL,  -- page_view, clique_grupo, clique_compra, engajamento
+  evento       TEXT    NOT NULL,  -- page_view, clique_grupo, clique_especialista, engajamento
   visitante    TEXT,              -- o mesmo identificador da LP (mesmo domínio)
   sessao       TEXT,              -- uma por abertura da página
   valor        INTEGER,           -- engajamento: segundos com a página visível

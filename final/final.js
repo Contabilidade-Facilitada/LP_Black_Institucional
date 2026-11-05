@@ -1,12 +1,12 @@
 /* =========================================================
-   Páginas finais do Typeform — medição (ver cloudflare/finais.js)
+   Páginas finais do Typeform — medição e QR Code (ver cloudflare/finais.js)
 
    Grava em /api/final (tabela finais_pf, separada das da LP: os números da
    LP no painel e no Data Gateway não mudam) o acesso, os cliques nos botões
    e o tempo com a página visível. Também empurra os cliques para o
    dataLayer, para as conversões do GTM:
-     final_clique_grupo   botão do grupo de WhatsApp
-     final_clique_compra  link secundário de compra (páginas "antecipar")
+     final_clique_grupo         botão do grupo de WhatsApp
+     final_clique_especialista  botão "Falar com especialista" (B·antecipar)
    Cada evento leva pagina_final, grupo_lead e intencao_lead (as mesmas
    variáveis empurradas no <head>, antes do GTM).
 
@@ -14,6 +14,9 @@
    quem se cadastrou na LP Institucional aparece ligado ao cadastro no
    painel. Quem veio da Esquenta Black (outro domínio) chega como visitante
    novo; a origem dele vem do lead_origin que o Typeform repassa na URL.
+
+   No computador, o link do grupo também aparece em QR Code, para entrar
+   pelo celular (pedido do time de copy).
    ========================================================= */
 (() => {
   "use strict";
@@ -26,6 +29,52 @@
   // aberto fora do Worker (arquivo solto): não mede nada
   if (!/^[ab]\/(antecipar|esperar)$/.test(pagina)) return;
 
+  /* ---------------- QR Code do grupo (só computador) ---------------- */
+  const computador = window.matchMedia("(min-width: 960px) and (hover: hover)");
+  const linkGrupo = document.querySelector("[data-link='grupo']:not(.is-pendente)")?.href || "";
+  let qrPronto = false;
+
+  function desenharQr() {
+    if (qrPronto || !linkGrupo || !computador.matches) return;
+    qrPronto = true;
+    const s = document.createElement("script");
+    s.src = "/final/qrcode.js?v=1.4.4";
+    s.onload = () => {
+      if (typeof window.qrcode !== "function") return;
+      const q = window.qrcode(0, "M");
+      q.addData(linkGrupo);
+      q.make();
+      const n = q.getModuleCount();
+      // um <path> só, com um quadrado por módulo escuro; 2 módulos de margem
+      let d = "";
+      for (let l = 0; l < n; l++) {
+        for (let c = 0; c < n; c++) if (q.isDark(l, c)) d += `M${c + 2} ${l + 2}h1v1h-1z`;
+      }
+      const NS = "http://www.w3.org/2000/svg";
+      document.querySelectorAll("[data-qr]").forEach((figura) => {
+        const svg = document.createElementNS(NS, "svg");
+        svg.setAttribute("viewBox", `0 0 ${n + 4} ${n + 4}`);
+        svg.setAttribute("role", "img");
+        svg.setAttribute("aria-label", "QR Code do grupo de WhatsApp");
+        svg.setAttribute("shape-rendering", "crispEdges");
+        const fundo = document.createElementNS(NS, "rect");
+        fundo.setAttribute("width", "100%");
+        fundo.setAttribute("height", "100%");
+        fundo.setAttribute("fill", "#fff");
+        const caminho = document.createElementNS(NS, "path");
+        caminho.setAttribute("d", d);
+        caminho.setAttribute("fill", "#050403");
+        svg.append(fundo, caminho);
+        figura.querySelector("[data-qr-codigo]").replaceChildren(svg);
+        figura.hidden = false;
+      });
+    };
+    document.head.append(s);
+  }
+  desenharQr();
+  computador.addEventListener?.("change", desenharQr);
+
+  /* ---------------- Medição ---------------- */
   const ler = (chave, tipo) => {
     try { return JSON.parse(tipo.getItem(chave)); } catch { return null; }
   };
@@ -84,7 +133,7 @@
     const link = e.target instanceof Element ? e.target.closest("[data-link]") : null;
     if (!link) return;
     if (link.classList.contains("is-pendente")) { e.preventDefault(); return; }
-    const tipo = link.dataset.link === "compra" ? "compra" : "grupo";
+    const tipo = link.dataset.link === "especialista" ? "especialista" : "grupo";
     if (Array.isArray(window.dataLayer)) {
       window.dataLayer.push({
         event: `final_clique_${tipo}`,

@@ -64,7 +64,7 @@
  * às pressas, que são a maioria.
  */
 
-import { LINKS_FINAIS, PAGINAS_FINAIS, lerPaginaFinal, linkSeguro } from "./finais.js";
+import { LINKS_FINAIS, PAGINAS_FINAIS, TIPOS_LINK, lerPaginaFinal, linkSeguro } from "./finais.js";
 
 // Linhas por resposta da sincronização do painel. A primeira carga pede
 // páginas seguidas até alcançar o fim; depois disso cada atualização traz só o
@@ -349,18 +349,18 @@ function inserirVarias(db, tabela, linhas) {
    --------------------------------------------------------------------------- */
 
 // O modelo final/index.html preenchido para o endereço pedido: atributos do
-// <html> (lidos pelo GTM e por final.js), só o bloco de texto da intenção e
-// os links do grupo de qualificação. O modelo é pedido sem os cabeçalhos do
-// navegador e a resposta sai sem ETag: os links ficam aqui, e não no
-// arquivo, então um 304 do arquivo serviria a página com o link antigo.
+// <html> (lidos pelo GTM e por final.js), só os blocos cujo data-so-pagina
+// (lista separada por espaço) inclui a página, e os links do grupo de
+// qualificação. Botão sem link fica visível, mas desativado (final.js avisa
+// no console). O modelo é pedido sem os cabeçalhos do navegador e a resposta
+// sai sem ETag: os links ficam aqui, e não no arquivo, então um 304 do
+// arquivo serviria a página com o link antigo.
 async function paginaFinal(env, url, final) {
   const modelo = await env.ASSETS.fetch(new Request(new URL("/final/", url)));
   if (!modelo.ok) return resposta(modelo.status === 404 ? 404 : 502);
   const links = LINKS_FINAIS[final.grupo] || {};
-  const grupo = linkSeguro(links.grupo);
-  const compra = linkSeguro(links.compra);
 
-  const pagina = new HTMLRewriter()
+  let pagina = new HTMLRewriter()
     .on("html", {
       element(el) {
         el.setAttribute("data-grupo", final.grupo);
@@ -368,37 +368,33 @@ async function paginaFinal(env, url, final) {
         el.setAttribute("data-pagina", final.pagina);
       },
     })
-    .on("[data-so-intencao]", {
+    .on("[data-so-pagina]", {
       element(el) {
-        if (el.getAttribute("data-so-intencao") !== final.intencao) el.remove();
+        if (!el.getAttribute("data-so-pagina").split(/\s+/).includes(final.pagina)) el.remove();
       },
-    })
-    .on("[data-link='grupo']", {
+    });
+  for (const tipo of TIPOS_LINK) {
+    const destino = linkSeguro(links[tipo]);
+    pagina = pagina.on(`[data-link='${tipo}']`, {
       element(el) {
-        if (grupo) {
-          el.setAttribute("href", grupo);
+        if (destino) {
+          el.setAttribute("href", destino);
         } else {
-          // sem link ainda: botão visível, mas desativado (final.js avisa no console)
           el.setAttribute("class", `${el.getAttribute("class") || ""} is-pendente`.trim());
           el.setAttribute("aria-disabled", "true");
         }
       },
-    })
-    .on("[data-link='compra']", {
-      element(el) {
-        if (compra) el.setAttribute("href", compra);
-        else el.remove();
-      },
-    })
-    .transform(modelo);
+    });
+  }
+  const preenchida = pagina.transform(modelo);
 
-  const r = new Response(pagina.body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+  const r = new Response(preenchida.body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
   r.headers.set("Cache-Control", "no-store");
   r.headers.set("X-Robots-Tag", "noindex, nofollow");
   return r;
 }
 
-const EVENTOS_FINAIS = new Set(["page_view", "clique_grupo", "clique_compra", "engajamento"]);
+const EVENTOS_FINAIS = new Set(["page_view", "engajamento", ...TIPOS_LINK.map((t) => `clique_${t}`)]);
 
 // Medição das páginas finais (final/final.js), na tabela finais_pf. As mesmas
 // travas da coleta da LP: só POST, só da própria origem, sem robôs.

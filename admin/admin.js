@@ -3388,7 +3388,7 @@
     const visitantes = distintos(pvs, "visitante");
     const quem = (evento) => distintos(lista.filter((e) => e.evento === evento), "visitante");
     const grupo = quem("clique_grupo");
-    const compra = quem("clique_compra");
+    const especialista = quem("clique_especialista");
     // tempo por sessão: o maior envio de engajamento de cada uma
     const tempos = new Map();
     for (const e of lista) {
@@ -3398,9 +3398,9 @@
       acessos: pvs.length,
       visitantes: visitantes.size,
       grupo: grupo.size,
-      compra: compra.size,
+      especialista: especialista.size,
       taxa: visitantes.size ? grupo.size / visitantes.size : NaN,
-      taxaCompra: visitantes.size ? compra.size / visitantes.size : NaN,
+      taxaEspecialista: visitantes.size ? especialista.size / visitantes.size : NaN,
       tempoMediano: tempos.size ? mediana([...tempos.values()]) : NaN,
     };
   }
@@ -3411,7 +3411,7 @@
     texto("#fi-visitantes-nota", `${plural(total.acessos, "acesso", "acessos")} nas 4 páginas finais`);
     contar("#fi-grupo", total.grupo, fmtNum, aoVivo);
     contar("#fi-taxa", total.taxa, (v) => fmtPct(v), aoVivo);
-    contar("#fi-compra", total.compra, fmtNum, aoVivo);
+    contar("#fi-especialista", total.especialista, fmtNum, aoVivo);
 
     // um cartão por página, na ordem A/B × antecipar/esperar
     $("#finais-paginas").replaceChildren(...PAGINAS_FINAIS.map((p, i) => {
@@ -3429,7 +3429,7 @@
         el("dl", { class: "final-cartao__dados" },
           linha("Visitantes", fmtNum(r.visitantes), r.acessos !== r.visitantes ? `${fmtNum(r.acessos)} acessos` : null),
           linha("Clicaram no grupo", fmtNum(r.grupo)),
-          p.chave.endsWith("antecipar") ? linha("Clicaram na compra", fmtNum(r.compra), Number.isFinite(r.taxaCompra) ? fmtPct(r.taxaCompra) : null) : null,
+          p.chave === "b/antecipar" ? linha("Clicaram em especialista", fmtNum(r.especialista), Number.isFinite(r.taxaEspecialista) ? fmtPct(r.taxaEspecialista) : null) : null,
           linha("Tempo mediano", Number.isFinite(r.tempoMediano) ? fmtDuracao(r.tempoMediano) : "—")));
     }));
 
@@ -3452,24 +3452,24 @@
       el("td", { class: "num" }, fmtNum(r.visitantes)),
       el("td", { class: "num" }, fmtNum(r.grupo)),
       el("td", { class: "num" }, fmtPct(r.taxa)),
-      el("td", { class: "num" }, fmtNum(r.compra))))
+      el("td", { class: "num" }, fmtNum(r.especialista))))
       : [el("tr", {}, el("td", { class: "vazio", colspan: 5 }, "Nenhum acesso às páginas finais no período."))]));
 
     // acessos recentes: cada page_view com o que aconteceu na mesma sessão
     const porSessao = new Map();
     for (const e of f.finais) {
       if (e.evento === "page_view" || !e.sessao) continue;
-      if (!porSessao.has(e.sessao)) porSessao.set(e.sessao, { grupo: false, compra: false, tempo: 0 });
+      if (!porSessao.has(e.sessao)) porSessao.set(e.sessao, { grupo: false, especialista: false, tempo: 0 });
       const s = porSessao.get(e.sessao);
       if (e.evento === "clique_grupo") s.grupo = true;
-      if (e.evento === "clique_compra") s.compra = true;
+      if (e.evento === "clique_especialista") s.especialista = true;
       if (e.evento === "engajamento") s.tempo = Math.max(s.tempo, e.valor || 0);
     }
     const recentes = f.finais.filter((e) => e.evento === "page_view").sort((a, b) => b.ts - a.ts).slice(0, 100);
     const corpoAcessos = $("#tabela-finais-acessos tbody");
     corpoAcessos.replaceChildren(...(recentes.length ? recentes.map((pv) => {
       const s = porSessao.get(pv.sessao) || {};
-      const clicou = [s.grupo ? "grupo" : null, s.compra ? "compra" : null].filter(Boolean);
+      const clicou = [s.grupo ? "grupo" : null, s.especialista ? "especialista" : null].filter(Boolean);
       return el("tr", { class: novosIds.has(`f${pv.id}`) ? "is-novo" : null },
         el("td", { title: fmtDataHora.format(pv.ts) }, fmtDataCurta.format(pv.ts).replace(",", "")),
         el("td", { class: "forte" }, NOME_PAGINA_FINAL[pv.pagina] || pv.pagina),
@@ -3678,7 +3678,7 @@
         lead_origin: Math.random() < 0.9 ? leadOrigin : "", pontuacao, dispositivo, navegador, sistema, estado, cidade, pais });
       const chance = pagina.endsWith("antecipar") ? 0.62 : 0.48;
       if (Math.random() < chance) finais.push({ ts: Math.min(ts + 8000, relogio()), evento: "clique_grupo", ...base });
-      if (pagina.endsWith("antecipar") && Math.random() < 0.12) finais.push({ ts: Math.min(ts + 12000, relogio()), evento: "clique_compra", ...base });
+      if (pagina === "b/antecipar" && Math.random() < 0.35) finais.push({ ts: Math.min(ts + 5000, relogio()), evento: "clique_especialista", ...base });
       finais.push({ ts: Math.min(ts + 15000, relogio()), evento: "engajamento", ...base, valor: Math.round(4 + Math.random() * 60) });
     }
     function visitasEsquenta(n, desde, ate) {

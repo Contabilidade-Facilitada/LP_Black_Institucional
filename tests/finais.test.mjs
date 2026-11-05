@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
-import { LINKS_FINAIS, PAGINAS_FINAIS, lerPaginaFinal, linkSeguro } from "../cloudflare/finais.js";
+import { GRUPOS_FINAIS, LINKS_FINAIS, PAGINAS_FINAIS, TIPOS_LINK, lerPaginaFinal, linkSeguro } from "../cloudflare/finais.js";
 import worker from "../cloudflare/worker.js";
 
 const raiz = new URL("../", import.meta.url);
@@ -75,13 +75,36 @@ test("link de botão só aceita http(s)", () => {
   assert.equal(linkSeguro("chat.whatsapp.com/abc"), "");
 });
 
-test("modelo tem um bloco por intenção, botão do grupo e link de compra só para antecipar", () => {
-  assert.match(modelo, /data-so-intencao="antecipar"[^>]*aria-labelledby="titulo-antecipar"/);
-  assert.match(modelo, /data-so-intencao="esperar"[^>]*aria-labelledby="titulo-esperar"/);
-  assert.match(modelo, /data-link="grupo"/);
-  assert.match(modelo, /data-link="compra" data-so-intencao="antecipar"/);
+// blocos com data-so-pagina, na ordem do modelo: [lista de páginas, html do bloco]
+function blocosDoModelo() {
+  return [...modelo.matchAll(/<section class="conteudo" data-so-pagina="([^"]+)"[\s\S]*?<\/section>/g)]
+    .map((m) => [m[1].split(/\s+/), m[0]]);
+}
+
+test("cada página tem exatamente um bloco de texto, e só a B·antecipar tem o especialista", () => {
+  const blocos = blocosDoModelo();
+  for (const p of PAGINAS_FINAIS) {
+    const dela = blocos.filter(([lista]) => lista.includes(p));
+    assert.equal(dela.length, 1, p);
+    const [, html] = dela[0];
+    assert.match(html, /data-link="grupo"/, `${p}: botão do grupo`);
+    assert.match(html, /data-qr/, `${p}: QR Code`);
+    assert.equal(/data-link="especialista"/.test(html), p === "b/antecipar", `${p}: especialista`);
+  }
+  // a B·antecipar abre com o especialista; o grupo vem depois
+  const [, b] = blocos.find(([lista]) => lista.includes("b/antecipar"));
+  assert.ok(b.indexOf('data-link="especialista"') < b.indexOf('data-link="grupo"'));
+  // nenhum link pronto no modelo: todos vêm de cloudflare/finais.js
+  assert.doesNotMatch(modelo, /<a [^>]*data-link="[^"]+"[^>]*href=/);
+  assert.match(modelo, /No grupo você receberá:/);
   assert.match(modelo, /GTM-ND2S8C9/);
   assert.match(modelo, /<meta name="robots" content="noindex, nofollow">/);
+});
+
+test("cada tipo de botão do modelo tem link configurado (ou pendente) no grupo onde aparece", () => {
+  assert.deepEqual(TIPOS_LINK, ["grupo", "especialista"]);
+  for (const g of GRUPOS_FINAIS) assert.ok("grupo" in LINKS_FINAIS[g], g);
+  assert.ok("especialista" in LINKS_FINAIS.b);
 });
 
 test("o modelo não sai sozinho, só pelos 4 endereços", async () => {
@@ -105,16 +128,18 @@ test("acesso e cliques vão para finais_pf, sem tocar nas tabelas da LP", async 
         dt: 0,
         ctx: { utm_source: "meta", utm_campaign: "bfn_black", lead_origin: "lp_black_november_2026_frios", pontuacao: "131", ref: "3rng23rvpr3.typeform.com" },
       },
+      { e: "clique_especialista", dt: 0 },
       { e: "clique_grupo", dt: 0 },
       { e: "engajamento", n: 42.4, dt: 0 },
       // fora da lista: ignorado
       { e: "lead_esquenta_black", dt: 0 },
+      { e: "clique_compra", dt: 0 },
     ],
   }, { "CF-IPCountry": "BR" });
   assert.equal(r.status, 204);
 
   const gravadas = linhas(env.DB, "finais_pf");
-  assert.deepEqual(gravadas.map((l) => l.evento), ["page_view", "clique_grupo", "engajamento"]);
+  assert.deepEqual(gravadas.map((l) => l.evento), ["page_view", "clique_especialista", "clique_grupo", "engajamento"]);
   assert.ok(gravadas.every((l) => l.pagina === "b/antecipar" && l.visitante === "vis-1" && l.sessao === "ses-1"));
   const pv = gravadas[0];
   assert.equal(pv.utm_source, "meta");
@@ -122,7 +147,7 @@ test("acesso e cliques vão para finais_pf, sem tocar nas tabelas da LP", async 
   assert.equal(pv.lead_origin, "lp_black_november_2026_frios");
   assert.equal(pv.pontuacao, 131);
   assert.equal(pv.dispositivo, "celular");
-  assert.equal(gravadas[2].valor, 42);
+  assert.equal(gravadas[3].valor, 42);
   // contexto só no page_view
   assert.equal(gravadas[1].utm_source, null);
 

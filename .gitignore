@@ -14,3 +14,6 @@
 # estado local do wrangler (teste do Worker e do D1) e segredos de teste
 .wrangler/
 .dev.vars
+
+# documentos de trabalho (copy, briefings): nunca publicados
+/assets/*.docx

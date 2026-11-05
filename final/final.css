@@ -2,7 +2,7 @@
    Páginas finais do Typeform (Black November 2026)
    Mesma identidade da LP (assets/css/style.css): preto profundo, laranja
    CF, títulos em Squada One, texto em Sora e CTA verde. Arquivo próprio e
-   pequeno: a página é uma tela só, e o style.css da LP passa de 3 mil linhas.
+   pequeno: a página é curta, e o style.css da LP passa de 3 mil linhas.
    ========================================================= */
 
 :root {
@@ -12,6 +12,7 @@
   --apagado: #a89b8e;
   --laranja: #ff9933;
   --laranja-forte: #f26a0c;
+  --verde: #00ff00;
   --linha: rgba(255, 255, 255, 0.08);
   --linha-laranja: rgba(255, 153, 51, 0.24);
   --gradiente-texto: linear-gradient(92deg, #ffd08a 0%, #ff9933 45%, #f26a0c 100%);
@@ -47,6 +48,7 @@ body {
 }
 
 img, svg { display: block; max-width: 100%; height: auto; }
+.sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 
 /* luz laranja atrás do conteúdo, como no topo da LP */
 .brilho {
@@ -63,9 +65,9 @@ img, svg { display: block; max-width: 100%; height: auto; }
   position: relative;
   flex: 1;
   width: 100%;
-  max-width: 620px;
+  max-width: 680px;
   margin: 0 auto;
-  padding: clamp(32px, 7vh, 72px) var(--gutter) 32px;
+  padding: clamp(32px, 6vh, 64px) var(--gutter) 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -104,21 +106,19 @@ img, svg { display: block; max-width: 100%; height: auto; }
 }
 
 /* ---------- Texto ---------- */
-.conteudo { display: grid; gap: 12px; }
-.conteudo__chamada {
-  margin: 0;
-  color: var(--laranja);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.conteudo {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  width: 100%;
 }
 .conteudo__titulo {
-  margin: 0;
+  margin: 0 0 4px;
+  max-width: 15em;
   font-family: var(--fonte-titulo);
   font-weight: 400;
-  font-size: clamp(38px, 9vw, 60px);
-  line-height: 0.98;
+  font-size: clamp(34px, 8.4vw, 54px);
+  line-height: 1;
   text-transform: uppercase;
   text-wrap: balance;
 }
@@ -128,58 +128,30 @@ img, svg { display: block; max-width: 100%; height: auto; }
   background-clip: text;
   color: transparent;
 }
+/* o emoji não existe na Squada One; fica na fonte do sistema, um pouco menor */
+.emoji { font-family: system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif; font-size: 0.78em; }
 .conteudo__texto {
-  margin: 0 auto;
+  margin: 0;
   max-width: 34em;
   color: var(--texto-2);
   font-size: clamp(15px, 3.8vw, 17px);
   text-wrap: pretty;
 }
+.conteudo__texto strong { color: var(--texto); }
+.conteudo__texto--separado { margin-top: 12px; }
 
-/* ---------- Passos ---------- */
-.passos {
-  display: grid;
-  gap: 8px;
-  width: 100%;
-  max-width: 420px;
+.alerta {
   margin: 0;
-  padding: 0;
-  list-style: none;
-  text-align: left;
-}
-.passos li {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--linha);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
-  font-size: 14.5px;
-  color: var(--texto-2);
-}
-.passos__numero {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+  max-width: 34em;
+  padding: 12px 16px;
   border: 1px solid var(--linha-laranja);
-  color: var(--laranja);
-  font-family: var(--fonte-titulo);
-  font-size: 18px;
+  border-radius: 14px;
+  background: rgba(255, 153, 51, 0.07);
+  color: var(--texto);
+  font-size: 14.5px;
 }
 
 /* ---------- Botões ---------- */
-.acoes {
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  width: 100%;
-  max-width: 420px;
-}
-
 .botao {
   position: relative;
   isolation: isolate;
@@ -188,6 +160,7 @@ img, svg { display: block; max-width: 100%; height: auto; }
   justify-content: center;
   gap: 0.6em;
   width: 100%;
+  max-width: 420px;
   padding: 20px 24px;
   border-radius: 999px;
   overflow: hidden;
@@ -198,11 +171,13 @@ img, svg { display: block; max-width: 100%; height: auto; }
   text-transform: uppercase;
   text-decoration: none;
   cursor: pointer;
-  transition: transform 0.4s var(--curva-saida), box-shadow 0.35s;
+  transition: transform 0.4s var(--curva-saida), box-shadow 0.35s, background-color 0.25s;
   -webkit-tap-highlight-color: transparent;
 }
 .botao:active { transform: scale(0.97); }
+.botao:focus-visible { outline: 2px solid var(--laranja); outline-offset: 4px; }
 .botao__icone { width: 22px; height: 22px; flex: none; }
+.botao__icone--traco { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 .botao--whatsapp {
   color: #031a00;
@@ -222,10 +197,16 @@ img, svg { display: block; max-width: 100%; height: auto; }
     0 18px 40px -10px rgba(0, 255, 0, 0.7),
     0 0 90px -12px rgba(0, 255, 0, 0.65);
 }
-.botao:focus-visible,
-.botao-secundario:focus-visible { outline: 2px solid var(--laranja); outline-offset: 4px; }
 
-/* link do grupo ainda não configurado (ver cloudflare/finais.js) */
+/* segunda ação da página B·antecipar: o grupo, depois do especialista */
+.botao--contorno {
+  color: var(--verde);
+  border: 1.5px solid rgba(0, 255, 0, 0.6);
+  background: rgba(0, 255, 0, 0.04);
+}
+.botao--contorno:hover { background: rgba(0, 255, 0, 0.1); transform: translateY(-2px); }
+
+/* link ainda não configurado (ver cloudflare/finais.js) */
 .botao.is-pendente {
   cursor: not-allowed;
   filter: grayscale(1);
@@ -251,32 +232,92 @@ img, svg { display: block; max-width: 100%; height: auto; }
   50% { transform: scale(1.025); }
 }
 
-.botao-secundario {
-  display: inline-flex;
+/* ---------- Botão do grupo + QR Code (o QR só no computador, ver final.js) ---------- */
+.acao-grupo {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 12px;
-  color: var(--apagado);
-  font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-  border-radius: 8px;
-  transition: color 0.25s;
+  gap: 16px;
+  width: 100%;
 }
-.botao-secundario svg {
-  width: 16px;
-  height: 16px;
+.qr {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.qr[hidden] { display: none; }
+.qr__codigo {
+  width: 132px;
+  padding: 6px;
+  border-radius: 12px;
+  background: #fff;
+}
+.qr__codigo svg { width: 100%; height: auto; }
+.qr figcaption { color: var(--apagado); font-size: 12px; line-height: 1.3; }
+@media (min-width: 960px) {
+  .acao-grupo { flex-direction: row; justify-content: center; align-items: center; gap: 24px; }
+  .acao-grupo .botao { flex: 0 1 380px; }
+  /* QR à direita do botão, com a legenda ao lado do código */
+  .qr { grid-template-columns: auto 92px; align-items: center; justify-items: start; gap: 12px; text-align: left; }
+  .qr__codigo { width: 104px; }
+}
+
+/* ---------- Dobra 2: o que tem no grupo ---------- */
+.beneficios {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  margin-top: 24px;
+  padding-top: 32px;
+  border-top: 1px solid var(--linha);
+}
+.beneficios__titulo {
+  margin: 0;
+  font-family: var(--fonte-titulo);
+  font-weight: 400;
+  font-size: clamp(26px, 6vw, 34px);
+  line-height: 1;
+  text-transform: uppercase;
+}
+.beneficios__lista {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+@media (min-width: 760px) { .beneficios__lista { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.beneficios__lista li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--linha);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--texto-2);
+  font-size: 14.5px;
+  font-weight: 500;
+}
+@media (min-width: 760px) {
+  .beneficios__lista li { flex-direction: column; align-items: flex-start; }
+}
+.beneficios__lista svg {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 9px;
+  border-radius: 12px;
+  border: 1px solid var(--linha-laranja);
+  background: rgba(255, 153, 51, 0.08);
   fill: none;
-  stroke: currentColor;
+  stroke: var(--laranja);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  transition: transform 0.4s var(--curva-mola);
 }
-.botao-secundario:hover { color: var(--texto); text-decoration: underline; text-underline-offset: 4px; }
-.botao-secundario:hover svg { transform: translateX(4px); }
-
-.nota { margin: 0; color: var(--apagado); font-size: 12.5px; }
 
 /* ---------- Rodapé ---------- */
 .rodape {
@@ -297,8 +338,6 @@ img, svg { display: block; max-width: 100%; height: auto; }
 .final > :nth-child(2) { animation-delay: 0.06s; }
 .final > :nth-child(3) { animation-delay: 0.12s; }
 .final > :nth-child(4) { animation-delay: 0.18s; }
-.final > :nth-child(5) { animation-delay: 0.24s; }
-.final > :nth-child(6) { animation-delay: 0.3s; }
 @keyframes entra {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
