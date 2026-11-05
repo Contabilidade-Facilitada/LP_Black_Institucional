@@ -4,20 +4,20 @@
    CF, títulos em Squada One, texto em Sora e CTA verde. Arquivo próprio e
    pequeno: a página é curta, e o style.css da LP passa de 3 mil linhas.
 
-   Estrutura: topo centralizado (título e apoio), ações em cartões (dois
-   lado a lado nas páginas "antecipar", um nas "esperar"), QR Code de cada link
-   (ícone ao lado de cada botão, só no computador) e a lista "No grupo você receberá". Tudo na mesma
-   largura (--largura), para as bordas ficarem alinhadas.
+   Estrutura, sempre num eixo central: marca (logo e selo), topo (título e
+   apoio), ações em cartões (dois lado a lado nas páginas "antecipar", um
+   nas "esperar") e a lista "No grupo você receberá". Tudo na mesma largura
+   (--largura) e com os espaços da escala abaixo. No computador, cada botão
+   tem ao lado o ícone do QR Code do seu link, que abre numa janela
+   flutuante (ver final.js).
    ========================================================= */
 
 :root {
   --fundo: #050403;
-  --superficie: #0d0a08;
   --texto: #f6f1ea;
-  --texto-2: #e3d8cc;
-  --apagado: #a89b8e;
+  --texto-2: #ddd2c6;
+  --apagado: #a39689;
   --laranja: #ff9933;
-  --laranja-forte: #f26a0c;
   --verde: #00ff00;
   --linha: rgba(255, 255, 255, 0.08);
   --linha-forte: rgba(255, 255, 255, 0.14);
@@ -27,13 +27,24 @@
   --fonte-titulo: "Squada One", "Arial Narrow", sans-serif;
   --fonte-texto: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
   --curva-saida: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* escala de espaços: todo intervalo da página sai daqui */
+  --e-1: 8px;
+  --e-2: 12px;
+  --e-3: 16px;
+  --e-4: 24px;
+  --e-5: 32px;
+  --e-6: 48px;
+  /* entre as partes da página (marca, bloco, lista) */
+  --secao: clamp(36px, 6vw, 56px);
+
   --raio: 20px;
   --gutter: 16px;
   --largura: 920px;
 }
-@media (min-width: 640px) { :root { --gutter: 24px; } }
+@media (min-width: 640px) { :root { --gutter: 32px; } }
 /* página com uma ação só: coluna mais estreita */
-[data-intencao="esperar"] { --largura: 640px; }
+[data-intencao="esperar"] { --largura: 600px; }
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -60,6 +71,7 @@ body {
 img, svg { display: block; max-width: 100%; height: auto; }
 .sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 strong { color: var(--texto); font-weight: 700; }
+p { margin: 0; }
 
 /* luz laranja atrás do topo, como na LP */
 .brilho {
@@ -68,36 +80,49 @@ strong { color: var(--texto); font-weight: 700; }
   height: 80vh;
   pointer-events: none;
   background:
-    radial-gradient(50% 55% at 50% 0%, rgba(255, 153, 51, 0.22), transparent 70%),
-    radial-gradient(35% 40% at 50% 10%, rgba(242, 106, 12, 0.18), transparent 70%);
+    radial-gradient(50% 55% at 50% 0%, rgba(255, 153, 51, 0.2), transparent 70%),
+    radial-gradient(35% 40% at 50% 10%, rgba(242, 106, 12, 0.16), transparent 70%);
 }
 
+/* ---------- Página: um eixo central; em tela alta, o conteúdo fica no meio ---------- */
 .final {
   position: relative;
   flex: 1;
   width: 100%;
   max-width: calc(var(--largura) + 2 * var(--gutter));
   margin: 0 auto;
-  padding: clamp(28px, 6vh, 56px) var(--gutter) 48px;
+  padding:
+    clamp(var(--e-5), 7vh, 72px)
+    max(var(--gutter), env(safe-area-inset-right))
+    clamp(var(--e-6), 8vh, 80px)
+    max(var(--gutter), env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 28px;
+  gap: var(--secao);
 }
-@media (min-width: 760px) { .final { gap: 36px; } }
+.final > * { width: 100%; }
 
+/* ---------- Marca: logo e selo ---------- */
+.marca {
+  display: grid;
+  justify-items: center;
+  gap: var(--e-4);
+}
 /* o <img> tem width="1500": sem o flex, o <picture> fica com essa largura e o logo encosta à esquerda */
-.final__logo { display: flex; justify-content: center; width: 100%; }
-.final__logo img { width: min(100%, 480px); }
-@media (max-width: 639px) { .final__logo img { width: min(56vw, 210px); } }
+.marca__logo { display: flex; justify-content: center; width: 100%; }
+.marca__logo img { width: min(100%, 460px); }
+@media (max-width: 639px) {
+  .marca { gap: var(--e-3); }
+  .marca__logo img { width: min(52vw, 200px); }
+}
 
-/* ---------- Selo de confirmação ---------- */
 .selo {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: -12px 0 -8px;
-  padding: 7px 14px 7px 8px;
+  gap: var(--e-1);
+  padding: 6px 14px 6px 7px;
   border: 1px solid var(--linha-laranja);
   border-radius: 999px;
   background: rgba(255, 153, 51, 0.08);
@@ -121,23 +146,23 @@ strong { color: var(--texto); font-weight: 700; }
 /* ---------- Bloco da página: topo + cartões ---------- */
 .bloco {
   display: grid;
-  gap: 28px;
-  width: 100%;
+  gap: clamp(var(--e-4), 4vw, 40px);
 }
 
 .topo {
   display: grid;
   justify-items: center;
-  gap: 14px;
+  gap: var(--e-3);
   text-align: center;
 }
 .topo__titulo {
   margin: 0;
-  max-width: 14em;
+  max-width: 13.5em;
   font-family: var(--fonte-titulo);
   font-weight: 400;
-  font-size: clamp(34px, 7.6vw, 56px);
+  font-size: clamp(30px, 8.4vw, 56px);
   line-height: 1;
+  letter-spacing: 0.005em;
   text-transform: uppercase;
   text-wrap: balance;
 }
@@ -150,20 +175,18 @@ strong { color: var(--texto); font-weight: 700; }
 /* o emoji não existe na Squada One; fica na fonte do sistema, um pouco menor */
 .emoji { font-family: system-ui, "Segoe UI Emoji", "Apple Color Emoji", sans-serif; font-size: 0.78em; }
 .topo__texto {
-  margin: 0;
-  max-width: 32em;
+  max-width: 30em;
   color: var(--texto-2);
-  font-size: clamp(15px, 3.8vw, 17.5px);
+  font-size: clamp(15px, 3.9vw, 17.5px);
   text-wrap: balance;
 }
 
-/* ---------- Cartões de ação ---------- */
+/* ---------- Cartões de ação (conteúdo centralizado) ---------- */
 .cartoes {
   display: grid;
-  gap: 16px;
-  width: 100%;
+  gap: var(--e-3);
 }
-@media (min-width: 760px) {
+@media (min-width: 720px) {
   .cartoes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
   .cartoes--um { grid-template-columns: minmax(0, 1fr); }
 }
@@ -171,20 +194,23 @@ strong { color: var(--texto); font-weight: 700; }
 .cartao {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 14px;
+  align-items: center;
+  gap: var(--e-3);
   min-width: 0;
-  padding: 22px 20px 20px;
+  padding: var(--e-4) 20px;
   border: 1px solid var(--linha);
   border-radius: var(--raio);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
-  text-align: left;
+  text-align: center;
+  /* o texto do botão se mede pela largura do cartão (ver .botao) */
+  container-type: inline-size;
 }
-@media (min-width: 640px) { .cartao { padding: 28px 28px 26px; } }
+@media (min-width: 640px) { .cartao { padding: var(--e-4); } }
+@media (min-width: 1000px) { .cartao { padding: var(--e-5); } }
 .cartao--destaque {
   border-color: var(--linha-laranja);
   background:
-    radial-gradient(120% 90% at 0% 0%, rgba(255, 153, 51, 0.14), transparent 60%),
+    radial-gradient(110% 80% at 50% 0%, rgba(255, 153, 51, 0.14), transparent 65%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
   box-shadow: 0 24px 60px -36px rgba(255, 153, 51, 0.6);
 }
@@ -192,39 +218,50 @@ strong { color: var(--texto); font-weight: 700; }
 .cartao__icone {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
   border: 1px solid var(--linha-laranja);
   background: rgba(255, 153, 51, 0.1);
   color: var(--laranja);
 }
-.cartao__icone svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cartao__icone svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .cartao__icone--verde { border-color: rgba(0, 255, 0, 0.3); background: rgba(0, 255, 0, 0.07); color: var(--verde); }
 .cartao__icone--verde svg { stroke: none; }
 
 /* o texto ocupa o espaço livre: os botões dos dois cartões ficam na mesma linha */
 .cartao__texto {
   flex: 1;
-  margin: 0;
+  max-width: 28em;
   color: var(--texto-2);
   font-size: 15.5px;
-  text-wrap: pretty;
+  text-wrap: balance;
 }
-.cartao__rotulo { margin: 0; color: var(--laranja); font-size: 14px; font-weight: 700; letter-spacing: 0.02em; }
-.cartao__chamada { margin: 4px 0 0; color: var(--texto); font-size: 15.5px; font-weight: 700; }
+.cartao__rotulo {
+  padding: 5px 12px;
+  border: 1px solid var(--linha-laranja);
+  border-radius: 999px;
+  background: rgba(255, 153, 51, 0.08);
+  color: var(--laranja);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.cartao__chamada { color: var(--texto); font-size: 15.5px; font-weight: 700; }
 
 .alerta {
-  margin: 0;
   justify-self: center;
-  padding: 12px 18px;
+  width: auto;
+  max-width: 100%;
+  padding: var(--e-2) 20px;
   border: 1px solid var(--linha-laranja);
   border-radius: 999px;
   background: rgba(255, 153, 51, 0.07);
   font-size: 14px;
   text-align: center;
+  text-wrap: balance;
 }
-@media (max-width: 639px) { .alerta { border-radius: 16px; } }
+@media (max-width: 639px) { .alerta { border-radius: var(--e-3); } }
 
 /* ---------- Botões ---------- */
 .botao {
@@ -235,20 +272,29 @@ strong { color: var(--texto); font-weight: 700; }
   justify-content: center;
   gap: 0.6em;
   width: 100%;
-  min-height: 60px;
-  padding: 16px 20px;
+  min-height: 58px;
+  padding: 14px 16px;
   border-radius: 999px;
   overflow: hidden;
-  font-size: clamp(13.5px, 3.8vw, 15.5px);
+  /* uma linha só: a letra diminui com o cartão (cqi), de 12,5 a 15,5 px */
+  font-size: clamp(12.5px, 5.1cqi, 15.5px);
   font-weight: 800;
-  letter-spacing: 0.03em;
-  line-height: 1.1;
+  letter-spacing: 0.025em;
+  line-height: 1.15;
+  white-space: nowrap;
   text-align: center;
   text-transform: uppercase;
   text-decoration: none;
   cursor: pointer;
   transition: transform 0.4s var(--curva-saida), box-shadow 0.35s, background-color 0.25s;
   -webkit-tap-highlight-color: transparent;
+}
+@media (min-width: 640px) { .botao { min-height: 60px; } }
+/* celulares muito estreitos (320 px): menos margem para o texto caber numa linha */
+@media (max-width: 359px) {
+  .cartao { padding-inline: var(--e-3); }
+  .botao { padding-inline: 10px; gap: 0.45em; letter-spacing: 0.01em; }
+  .botao__icone { width: 20px; height: 20px; }
 }
 .botao:active { transform: scale(0.97); }
 .botao:focus-visible { outline: 2px solid var(--laranja); outline-offset: 4px; }
@@ -304,8 +350,10 @@ strong { color: var(--texto); font-weight: 700; }
 .acao {
   display: flex;
   align-items: stretch;
+  justify-content: center;
   gap: 10px;
   width: 100%;
+  max-width: 420px;
 }
 .acao .botao { flex: 1; min-width: 0; }
 .qr-botao {
@@ -397,77 +445,85 @@ strong { color: var(--texto); font-weight: 700; }
 /* ---------- "No grupo você receberá" ---------- */
 .beneficios {
   display: grid;
-  gap: 18px;
-  width: 100%;
-  padding-top: 32px;
+  gap: var(--e-4);
+  padding-top: var(--secao);
   border-top: 1px solid var(--linha);
 }
 .beneficios__titulo {
   margin: 0;
   font-family: var(--fonte-titulo);
   font-weight: 400;
-  font-size: clamp(26px, 6vw, 34px);
+  font-size: clamp(26px, 6.4vw, 36px);
   line-height: 1;
   text-align: center;
   text-transform: uppercase;
 }
+/* ícone sobre o texto, centralizados; 2 colunas no celular, 3 no computador */
 .beneficios__lista {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-@media (min-width: 760px) {
-  .beneficios__lista { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* número ímpar de itens no celular: o último ocupa a linha inteira */
+.beneficios__lista li:last-child:nth-child(odd) { grid-column: 1 / -1; }
+@media (min-width: 720px) {
+  .beneficios__lista { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--e-3); }
   .beneficios__lista--dois { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .beneficios__lista li:last-child:nth-child(odd) { grid-column: auto; }
 }
+/* ícones presos ao topo: na mesma linha da grade, ficam todos na mesma altura */
 .beneficios__lista li {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 14px;
-  min-height: 72px;
-  padding: 14px 16px;
+  justify-content: flex-start;
+  gap: var(--e-2);
+  min-height: 116px;
+  padding: var(--e-3) var(--e-2);
   border: 1px solid var(--linha);
-  border-radius: 16px;
+  border-radius: var(--e-3);
   background: rgba(255, 255, 255, 0.025);
   color: var(--texto-2);
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 500;
   line-height: 1.35;
+  text-align: center;
+  text-wrap: balance;
 }
+@media (min-width: 720px) { .beneficios__lista li { min-height: 132px; padding: 20px var(--e-3); font-size: 14.5px; } }
 .beneficios__icone {
   flex: none;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
   border: 1px solid var(--linha-laranja);
   background: rgba(255, 153, 51, 0.08);
   color: var(--laranja);
 }
 .beneficios__icone svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-/* ---------- Rodapé ---------- */
+/* ---------- Rodapé (só no celular: no computador o logo do topo já traz as marcas) ---------- */
 .rodape {
   position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 24px;
-  padding: 24px var(--gutter) max(24px, env(safe-area-inset-bottom));
+  gap: var(--e-4);
+  padding: var(--e-4) var(--gutter) max(var(--e-4), env(safe-area-inset-bottom));
   border-top: 1px solid var(--linha);
 }
 .rodape img { width: auto; height: 26px; opacity: 0.7; }
-/* no computador o logo do topo já traz as duas marcas */
 @media (min-width: 640px) { .rodape { display: none; } }
 
 /* ---------- Entrada ---------- */
 .final > :not(dialog) { animation: entra 0.8s var(--curva-saida) both; }
-.final > :nth-child(2) { animation-delay: 0.05s; }
-.final > :nth-child(3) { animation-delay: 0.1s; }
-.final > :nth-child(n + 4):not(dialog) { animation-delay: 0.15s; }
+.final > :nth-child(2):not(dialog) { animation-delay: 0.06s; }
+.final > :nth-child(n + 3):not(dialog) { animation-delay: 0.12s; }
 @keyframes entra {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
