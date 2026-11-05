@@ -27,8 +27,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Squada+One&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/final/final.css?v=20261105-2">
-  <script src="/final/final.js?v=20261105-2" defer></script>
+  <link rel="stylesheet" href="/final/final.css?v=20261105-3">
+  <script src="/final/final.js?v=20261105-3" defer></script>
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
@@ -42,6 +42,9 @@
     <symbol id="i-presente" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/></symbol>
     <symbol id="i-relogio" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
     <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+    <symbol id="i-tabela" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></symbol>
+    <symbol id="i-livro" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+    <symbol id="i-calculadora" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8"/><path d="M16 14v4M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M8 18h.01M12 18h.01"/></symbol>
   </svg>
 
   <div class="brilho" aria-hidden="true"></div>
@@ -57,17 +60,21 @@
       Respostas recebidas
     </p>
 
-    <!-- ========== A · quer antecipar (menos qualificado) ========== -->
+    <!-- ========== A · quer antecipar (menos qualificado): especialista primeiro ========== -->
     <section class="conteudo" data-so-pagina="a/antecipar" aria-labelledby="titulo-a-antecipar">
       <h1 class="conteudo__titulo" id="titulo-a-antecipar">Excelente! Você está a um passo de <span class="destaque">antecipar sua matrícula.</span> <span class="emoji" aria-hidden="true">🚀</span></h1>
-      <p class="conteudo__texto">Quer ter acesso às melhores condições da Black antes de todo mundo?</p>
-      <p class="conteudo__texto"><strong>Entre agora no nosso grupo de WhatsApp</strong> e receba em primeira mão a possibilidade de antecipar as matrículas, além de receber todas as informações importantes.</p>
-      <p class="alerta"><span aria-hidden="true">⚠️</span> <strong>Não fique de fora da maior oportunidade da sua carreira.</strong></p>
+      <p class="conteudo__texto">Essa é a oportunidade para você <strong>transformar</strong> sua carreira com as melhores condições que já fizemos.</p>
+      <p class="conteudo__texto">Para continuar e antecipar a sua matrícula, fale agora mesmo com um de nossos especialistas:</p>
+      <a class="botao botao--whatsapp" data-link="especialista" rel="noopener">
+        <svg class="botao__icone botao__icone--traco" aria-hidden="true"><use href="#i-especialista"/></svg>
+        Falar com especialista
+        <span class="botao__brilho" aria-hidden="true"></span>
+      </a>
+      <p class="conteudo__texto conteudo__texto--separado">Enquanto isso, você pode entrar no grupo para receber os detalhes da Black, além de materiais e ferramentas exclusivas:</p>
       <div class="acao-grupo">
-        <a class="botao botao--whatsapp" data-link="grupo" rel="noopener">
+        <a class="botao botao--contorno" data-link="grupo" rel="noopener">
           <svg class="botao__icone" aria-hidden="true"><use href="#i-whatsapp"/></svg>
           Quero entrar no grupo
-          <span class="botao__brilho" aria-hidden="true"></span>
         </a>
         <figure class="qr" data-qr hidden><div class="qr__codigo" data-qr-codigo></div><figcaption>Ou aponte a câmera do celular</figcaption></figure>
       </div>
@@ -76,8 +83,12 @@
     <!-- ========== A e B · preferem esperar (texto igual) ========== -->
     <section class="conteudo" data-so-pagina="a/esperar b/esperar" aria-labelledby="titulo-esperar">
       <h1 class="conteudo__titulo" id="titulo-esperar">Falta pouco para a maior Black do <span class="destaque">Contabilidade Facilitada!</span> <span class="emoji" aria-hidden="true">🚀</span></h1>
-      <p class="conteudo__texto">Essa é a oportunidade para você transformar sua carreira com as melhores condições possíveis.</p>
-      <p class="conteudo__texto">Entre agora no nosso grupo de WhatsApp e receba em primeira mão todas as informações importantes.</p>
+      <p class="conteudo__texto">Essa é a oportunidade para você <strong>transformar</strong> sua carreira com as melhores condições que já fizemos.</p>
+      <div class="alerta alerta--bloco">
+        <p class="alerta__titulo"><span aria-hidden="true">⚠️</span> Importante:</p>
+        <p>O nosso principal canal de comunicação será o <strong>grupo exclusivo no WhatsApp</strong>. Enviaremos os <strong>detalhes da Black</strong> e o <strong>link de matrícula</strong> somente para quem estiver participando.</p>
+      </div>
+      <p class="conteudo__texto"><strong>Clique no botão e entre agora:</strong></p>
       <div class="acao-grupo">
         <a class="botao botao--whatsapp" data-link="grupo" rel="noopener">
           <svg class="botao__icone" aria-hidden="true"><use href="#i-whatsapp"/></svg>
@@ -91,8 +102,9 @@
     <!-- ========== B · quer antecipar (mais qualificado): especialista primeiro ========== -->
     <section class="conteudo" data-so-pagina="b/antecipar" aria-labelledby="titulo-b-antecipar">
       <h1 class="conteudo__titulo" id="titulo-b-antecipar">Excelente! Você está a um passo de <span class="destaque">antecipar sua matrícula.</span> <span class="emoji" aria-hidden="true">🚀</span></h1>
-      <p class="conteudo__texto">Para ter acesso a todas as informações importantes e à possibilidade de antecipar a sua matrícula, fale agora mesmo com um de nossos especialistas:</p>
-      <a class="botao botao--whatsapp botao--largo" data-link="especialista" rel="noopener">
+      <p class="conteudo__texto">Essa é a oportunidade para você <strong>transformar</strong> sua carreira com as melhores condições que já fizemos.</p>
+      <p class="conteudo__texto">Para continuar e antecipar a sua matrícula, fale agora mesmo com um de nossos especialistas:</p>
+      <a class="botao botao--whatsapp" data-link="especialista" rel="noopener">
         <svg class="botao__icone botao__icone--traco" aria-hidden="true"><use href="#i-especialista"/></svg>
         Falar com especialista
         <span class="botao__brilho" aria-hidden="true"></span>
@@ -108,12 +120,24 @@
       <p class="alerta"><span aria-hidden="true">⚠️</span> <strong>Não fique de fora da maior oportunidade da sua carreira.</strong></p>
     </section>
 
-    <!-- ========== Dobra 2 (igual nas 4) ========== -->
+    <!-- ========== "No grupo você receberá" (a lista varia por página) ========== -->
     <section class="beneficios" aria-labelledby="titulo-beneficios">
       <h2 class="beneficios__titulo" id="titulo-beneficios">No grupo você receberá:</h2>
-      <ul class="beneficios__lista">
+      <ul class="beneficios__lista" data-so-pagina="a/antecipar">
         <li><svg aria-hidden="true"><use href="#i-presente"/></svg>Materiais e ferramentas de bônus</li>
         <li><svg aria-hidden="true"><use href="#i-relogio"/></svg>Possibilidade de antecipação da matrícula</li>
+        <li><svg aria-hidden="true"><use href="#i-link"/></svg>Informações e links importantes</li>
+        <li><svg aria-hidden="true"><use href="#i-tabela"/></svg>Tabela CST</li>
+        <li><svg aria-hidden="true"><use href="#i-livro"/></svg>Ebook da Reforma Tributária</li>
+        <li><svg aria-hidden="true"><use href="#i-calculadora"/></svg>Consulta Alíquota ISS</li>
+      </ul>
+      <ul class="beneficios__lista" data-so-pagina="b/antecipar">
+        <li><svg aria-hidden="true"><use href="#i-presente"/></svg>Materiais e ferramentas de bônus</li>
+        <li><svg aria-hidden="true"><use href="#i-relogio"/></svg>Possibilidade de antecipação da matrícula</li>
+        <li><svg aria-hidden="true"><use href="#i-link"/></svg>Informações e links importantes</li>
+      </ul>
+      <ul class="beneficios__lista beneficios__lista--dois" data-so-pagina="a/esperar b/esperar">
+        <li><svg aria-hidden="true"><use href="#i-presente"/></svg>Materiais e ferramentas de bônus</li>
         <li><svg aria-hidden="true"><use href="#i-link"/></svg>Informações e links importantes</li>
       </ul>
     </section>

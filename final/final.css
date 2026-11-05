@@ -150,6 +150,11 @@ img, svg { display: block; max-width: 100%; height: auto; }
   color: var(--texto);
   font-size: 14.5px;
 }
+/* aviso com título, nas páginas "esperar" */
+.alerta--bloco { display: grid; gap: 6px; padding: 16px 18px; color: var(--texto-2); font-size: 15px; text-align: left; }
+.alerta--bloco p { margin: 0; }
+.alerta--bloco strong { color: var(--texto); }
+.alerta__titulo { color: var(--laranja); font-weight: 700; }
 
 /* ---------- Botões ---------- */
 .botao {
@@ -288,7 +293,10 @@ img, svg { display: block; max-width: 100%; height: auto; }
   list-style: none;
   text-align: left;
 }
-@media (min-width: 760px) { .beneficios__lista { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 760px) {
+  .beneficios__lista { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .beneficios__lista--dois { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 440px; margin-inline: auto; width: 100%; }
+}
 .beneficios__lista li {
   display: flex;
   align-items: center;

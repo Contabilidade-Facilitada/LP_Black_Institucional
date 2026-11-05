@@ -81,7 +81,7 @@ function blocosDoModelo() {
     .map((m) => [m[1].split(/\s+/), m[0]]);
 }
 
-test("cada página tem exatamente um bloco de texto, e só a B·antecipar tem o especialista", () => {
+test("cada página tem exatamente um bloco de texto; nas \"antecipar\" o especialista vem antes do grupo", () => {
   const blocos = blocosDoModelo();
   for (const p of PAGINAS_FINAIS) {
     const dela = blocos.filter(([lista]) => lista.includes(p));
@@ -89,11 +89,10 @@ test("cada página tem exatamente um bloco de texto, e só a B·antecipar tem o 
     const [, html] = dela[0];
     assert.match(html, /data-link="grupo"/, `${p}: botão do grupo`);
     assert.match(html, /data-qr/, `${p}: QR Code`);
-    assert.equal(/data-link="especialista"/.test(html), p === "b/antecipar", `${p}: especialista`);
+    const antecipar = p.endsWith("antecipar");
+    assert.equal(/data-link="especialista"/.test(html), antecipar, `${p}: especialista`);
+    if (antecipar) assert.ok(html.indexOf('data-link="especialista"') < html.indexOf('data-link="grupo"'), p);
   }
-  // a B·antecipar abre com o especialista; o grupo vem depois
-  const [, b] = blocos.find(([lista]) => lista.includes("b/antecipar"));
-  assert.ok(b.indexOf('data-link="especialista"') < b.indexOf('data-link="grupo"'));
   // nenhum link pronto no modelo: todos vêm de cloudflare/finais.js
   assert.doesNotMatch(modelo, /<a [^>]*data-link="[^"]+"[^>]*href=/);
   assert.match(modelo, /No grupo você receberá:/);
@@ -101,10 +100,23 @@ test("cada página tem exatamente um bloco de texto, e só a B·antecipar tem o 
   assert.match(modelo, /<meta name="robots" content="noindex, nofollow">/);
 });
 
-test("cada tipo de botão do modelo tem link configurado (ou pendente) no grupo onde aparece", () => {
+test("lista \"No grupo você receberá\": uma por página, com os itens do documento", () => {
+  const listas = [...modelo.matchAll(/<ul class="beneficios__lista[^"]*" data-so-pagina="([^"]+)">([\s\S]*?)<\/ul>/g)]
+    .map((m) => [m[1].split(/\s+/), [...m[2].matchAll(/<\/svg>([^<]+)<\/li>/g)].map((i) => i[1])]);
+  const itens = (p) => {
+    const dela = listas.filter(([lista]) => lista.includes(p));
+    assert.equal(dela.length, 1, p);
+    return dela[0][1];
+  };
+  const base = ["Materiais e ferramentas de bônus", "Possibilidade de antecipação da matrícula", "Informações e links importantes"];
+  assert.deepEqual(itens("a/antecipar"), [...base, "Tabela CST", "Ebook da Reforma Tributária", "Consulta Alíquota ISS"]);
+  assert.deepEqual(itens("b/antecipar"), base);
+  for (const p of ["a/esperar", "b/esperar"]) assert.deepEqual(itens(p), [base[0], base[2]]);
+});
+
+test("cada grupo tem os links que as páginas dele usam (vazios = pendentes)", () => {
   assert.deepEqual(TIPOS_LINK, ["grupo", "especialista"]);
-  for (const g of GRUPOS_FINAIS) assert.ok("grupo" in LINKS_FINAIS[g], g);
-  assert.ok("especialista" in LINKS_FINAIS.b);
+  for (const g of GRUPOS_FINAIS) assert.deepEqual(Object.keys(LINKS_FINAIS[g]).sort(), ["especialista", "grupo"], g);
 });
 
 test("o modelo não sai sozinho, só pelos 4 endereços", async () => {

@@ -16,7 +16,7 @@
  * de qualificação (A ou B): a otimização do tráfego pago é feita pelo link do
  * botão, então cada grupo tem o seu.
  *
- * O foco é levar a pessoa ao grupo de WhatsApp. Na página B·antecipar o
+ * O foco é levar a pessoa ao grupo de WhatsApp. Nas páginas "antecipar" o
  * botão principal é "Falar com especialista" (comercial), e o grupo vem
  * depois.
  *
@@ -29,11 +29,13 @@ export const LINKS_FINAIS = {
   a: {
     // PENDENTE: link do grupo de WhatsApp dos leads A (0 a 78)
     grupo: "",
+    // PENDENTE: link do especialista dos leads A (só em /final/a/antecipar)
+    especialista: "",
   },
   b: {
     // PENDENTE: link do grupo de WhatsApp dos leads B (79 a 200)
     grupo: "",
-    // PENDENTE: link do especialista (só aparece em /final/b/antecipar)
+    // PENDENTE: link do especialista dos leads B (só em /final/b/antecipar)
     especialista: "",
   },
 };

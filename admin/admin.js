@@ -3429,7 +3429,7 @@
         el("dl", { class: "final-cartao__dados" },
           linha("Visitantes", fmtNum(r.visitantes), r.acessos !== r.visitantes ? `${fmtNum(r.acessos)} acessos` : null),
           linha("Clicaram no grupo", fmtNum(r.grupo)),
-          p.chave === "b/antecipar" ? linha("Clicaram em especialista", fmtNum(r.especialista), Number.isFinite(r.taxaEspecialista) ? fmtPct(r.taxaEspecialista) : null) : null,
+          p.chave.endsWith("antecipar") ? linha("Clicaram em especialista", fmtNum(r.especialista), Number.isFinite(r.taxaEspecialista) ? fmtPct(r.taxaEspecialista) : null) : null,
           linha("Tempo mediano", Number.isFinite(r.tempoMediano) ? fmtDuracao(r.tempoMediano) : "—")));
     }));
 
@@ -3678,7 +3678,7 @@
         lead_origin: Math.random() < 0.9 ? leadOrigin : "", pontuacao, dispositivo, navegador, sistema, estado, cidade, pais });
       const chance = pagina.endsWith("antecipar") ? 0.62 : 0.48;
       if (Math.random() < chance) finais.push({ ts: Math.min(ts + 8000, relogio()), evento: "clique_grupo", ...base });
-      if (pagina === "b/antecipar" && Math.random() < 0.35) finais.push({ ts: Math.min(ts + 5000, relogio()), evento: "clique_especialista", ...base });
+      if (pagina.endsWith("antecipar") && Math.random() < 0.35) finais.push({ ts: Math.min(ts + 5000, relogio()), evento: "clique_especialista", ...base });
       finais.push({ ts: Math.min(ts + 15000, relogio()), evento: "engajamento", ...base, valor: Math.round(4 + Math.random() * 60) });
     }
     function visitasEsquenta(n, desde, ate) {
