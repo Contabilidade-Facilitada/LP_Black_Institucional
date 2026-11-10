@@ -4,11 +4,14 @@
    CF, títulos em Squada One, texto em Sora e CTA verde. Arquivo próprio e
    pequeno: a página é curta, e o style.css da LP passa de 3 mil linhas.
 
-   Celular e tablet: uma coluna centralizada (marca, título, cartões de
-   ação, benefícios). Computador (1024 px ou mais): tudo numa tela só, sem
-   rolar; marca e selo numa faixa no topo, título e benefícios à esquerda,
-   cartões de ação à direita. Para isso o .bloco vira "display: contents"
-   e seus filhos entram direto na grade do .final.
+   Uma coluna só, centralizada, na mesma ordem em todas as telas:
+     1. marca (logo e selo)
+     2. headline
+     3. cartões com os botões, um embaixo do outro
+     4. "No grupo você receberá" (itens compactos)
+     5. rodapé com a frase de apoio (a mesma nas 4 páginas)
+   No computador o cartão com ícone vira uma faixa (ícone, texto e botão
+   na mesma linha), para a página ficar mais curta.
 
    Os espaços saem da escala --e-*. As animações usam só transform e
    opacity (e um brilho no botão), e somem com "reduzir movimento".
@@ -38,16 +41,19 @@
   --e-4: 24px;
   --e-5: 32px;
   --e-6: 48px;
-  --secao: clamp(32px, 6vw, 48px);
+  --secao: clamp(32px, 5vw, 44px);
 
   --raio: 20px;
   --gutter: 16px;
-  --largura: 920px;
+  --largura: 640px;
 }
 @media (min-width: 640px) { :root { --gutter: 32px; } }
-/* página com uma ação só: coluna mais estreita (no computador vale a grade) */
-[data-intencao="esperar"] { --largura: 600px; }
-@media (min-width: 1024px) { :root, [data-intencao="esperar"] { --largura: 1080px; } }
+/* computador: as páginas "antecipar" têm as faixas (ícone, texto e botão numa linha) e
+   pedem mais largura; as "esperar" têm um cartão centralizado e ficam mais estreitas */
+@media (min-width: 1024px) {
+  :root { --largura: 880px; }
+  [data-intencao="esperar"] { --largura: 640px; }
+}
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -111,8 +117,7 @@ p { margin: 0; }
 @keyframes deriva-1 { to { transform: translate(18vw, 14vh) scale(1.15); } }
 @keyframes deriva-2 { to { transform: translate(-16vw, 22vh) scale(0.9); } }
 
-
-/* ---------- Página ---------- */
+/* ---------- Página: uma coluna, centralizada ---------- */
 .final {
   position: relative;
   flex: 1;
@@ -120,31 +125,27 @@ p { margin: 0; }
   max-width: calc(var(--largura) + 2 * var(--gutter));
   margin: 0 auto;
   padding:
-    clamp(var(--e-5), 6vh, 64px)
+    clamp(var(--e-5), 5vh, 56px)
     max(var(--gutter), env(safe-area-inset-right))
-    clamp(var(--e-6), 7vh, 72px)
+    var(--secao)
     max(var(--gutter), env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
   gap: var(--secao);
 }
 .final > * { width: 100%; }
 
-/* ---------- Marca: logo e selo ---------- */
+/* ---------- 1. Marca: logo e selo ---------- */
 .marca {
   display: grid;
   justify-items: center;
-  gap: var(--e-4);
+  gap: var(--e-3);
 }
 /* o <img> tem width="1500": sem o flex, o <picture> fica com essa largura e o logo encosta à esquerda */
 .marca__logo { display: flex; justify-content: center; width: 100%; }
-.marca__logo img { width: min(100%, 460px); }
-@media (max-width: 639px) {
-  .marca { gap: var(--e-3); }
-  .marca__logo img { width: min(52vw, 200px); }
-}
+.marca__logo img { width: min(100%, 400px); }
+@media (max-width: 639px) { .marca__logo img { width: min(52vw, 200px); } }
 
 .selo {
   position: relative;
@@ -179,24 +180,19 @@ p { margin: 0; }
   70%, 100% { box-shadow: 0 0 0 10px rgba(0, 255, 0, 0); }
 }
 
-/* ---------- Bloco: título + cartões ---------- */
+/* ---------- 2. Headline + 3. cartões ---------- */
 .bloco {
   display: grid;
-  gap: clamp(var(--e-4), 4vw, 40px);
+  gap: var(--secao);
 }
 
-.topo {
-  display: grid;
-  justify-items: center;
-  gap: var(--e-3);
-  text-align: center;
-}
+.topo { display: grid; justify-items: center; text-align: center; }
 .topo__titulo {
   margin: 0;
-  max-width: 13.5em;
+  max-width: 14em;
   font-family: var(--fonte-titulo);
   font-weight: 400;
-  font-size: clamp(30px, 8.4vw, 56px);
+  font-size: clamp(30px, 8.4vw, 58px);
   line-height: 1;
   letter-spacing: 0.005em;
   text-transform: uppercase;
@@ -223,21 +219,11 @@ p { margin: 0; }
   0%, 100% { transform: translate(0, 0) rotate(0); }
   50% { transform: translate(3px, -6px) rotate(6deg); }
 }
-.topo__texto {
-  max-width: 30em;
-  color: var(--texto-2);
-  font-size: clamp(15px, 3.9vw, 17.5px);
-  text-wrap: balance;
-}
 
-/* ---------- Cartões de ação ---------- */
+/* cartões sempre um embaixo do outro */
 .cartoes {
   display: grid;
   gap: var(--e-3);
-}
-@media (min-width: 720px) and (max-width: 1023px) {
-  .cartoes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-  .cartoes--um { grid-template-columns: minmax(0, 1fr); }
 }
 
 .cartao {
@@ -298,10 +284,8 @@ p { margin: 0; }
 .cartao__icone--verde { border-color: rgba(0, 255, 0, 0.3); background: rgba(0, 255, 0, 0.07); color: var(--verde); }
 .cartao__icone--verde svg { stroke: none; }
 
-/* o texto ocupa o espaço livre: os botões de cartões lado a lado ficam na mesma linha */
 .cartao__texto {
-  flex: 1;
-  max-width: 28em;
+  max-width: 30em;
   color: var(--texto-2);
   font-size: 15.5px;
   text-wrap: balance;
@@ -318,9 +302,9 @@ p { margin: 0; }
 }
 .cartao__chamada { color: var(--texto); font-size: 15.5px; font-weight: 700; }
 
+/* alerta da B·antecipar: dentro do grupo de cartões, logo abaixo deles */
 .alerta {
   justify-self: center;
-  width: auto;
   max-width: 100%;
   padding: var(--e-2) 20px;
   border: 1px solid var(--linha-laranja);
@@ -331,8 +315,6 @@ p { margin: 0; }
   text-wrap: balance;
 }
 @media (max-width: 639px) { .alerta { border-radius: var(--e-3); } }
-/* fica dentro do grupo de cartões, logo abaixo deles, na largura toda */
-.cartoes > .alerta { grid-column: 1 / -1; }
 
 /* ---------- Botões ---------- */
 .botao {
@@ -389,7 +371,7 @@ p { margin: 0; }
 }
 .botao--whatsapp:hover { transform: translateY(-2px); }
 
-/* segunda ação: o grupo, ao lado do especialista */
+/* segunda ação: o grupo, depois do especialista */
 .botao--contorno {
   color: var(--verde);
   border: 1.5px solid rgba(0, 255, 0, 0.55);
@@ -523,7 +505,7 @@ p { margin: 0; }
 .qr-janela__modelo[hidden] { display: none; }
 .qr-janela__legenda { margin: 16px 0 0; color: var(--texto-2); font-size: 14.5px; }
 
-/* ---------- "No grupo você receberá": itens compactos (ícone ao lado do texto) ---------- */
+/* ---------- 4. "No grupo você receberá": itens compactos ---------- */
 .beneficios {
   display: grid;
   gap: var(--e-3);
@@ -579,118 +561,88 @@ p { margin: 0; }
 }
 .beneficios__lista li:hover .beneficios__icone { transform: rotate(-10deg) scale(1.1); }
 .beneficios__icone svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-@media (max-width: 359px) { .beneficios__lista { grid-template-columns: minmax(0, 1fr); } }
-@media (min-width: 720px) and (max-width: 1023px) {
+/* celular: uma coluna (em duas o texto ficava espremido em 3 ou 4 linhas) */
+@media (max-width: 479px) {
+  .beneficios__lista { grid-template-columns: minmax(0, 1fr); }
+  .beneficios__lista li { min-height: 52px; }
+}
+/* 3 colunas a partir do tablet (6 e 3 itens); 2 itens continuam em 2 */
+@media (min-width: 720px) {
   .beneficios__lista { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .beneficios__lista--dois { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .beneficios__lista li:last-child:nth-child(odd) { grid-column: auto; }
 }
 
-/* ---------- Cartão compacto: ícone ao lado do texto, botão embaixo ----------
-   Só no computador, para tudo caber numa tela. No celular e no tablet o
-   conteúdo do cartão fica centralizado, no mesmo eixo da página. */
-@media (min-width: 1024px) {
-  .cartao {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    column-gap: 14px;
-    row-gap: 18px;
-    text-align: left;
-  }
-  .cartao__texto { max-width: none; text-wrap: pretty; }
-  .cartao > :not(.cartao__icone) { grid-column: 2; }
-  .cartao > .acao,
-  .cartoes--um .cartao > * { grid-column: 1 / -1; }
-  .cartao__rotulo { justify-self: start; }
-  .acao { max-width: none; }
-}
-
-/* =========================================================
-   Computador: tudo numa tela só
-   ========================================================= */
-@media (min-width: 1024px) {
-  .final {
-    display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-    grid-template-rows: auto auto auto;
-    align-content: center;
-    column-gap: clamp(40px, 5vw, 72px);
-    row-gap: var(--e-5);
-    padding-top: clamp(var(--e-4), 4vh, 48px);
-    padding-bottom: clamp(var(--e-4), 4vh, 48px);
-  }
-  .final > * { width: auto; }
-  /* o bloco some como caixa: título, cartões e alerta entram na grade */
-  .bloco { display: contents; }
-
-  /* faixa do topo: logo à esquerda, selo à direita */
-  .marca {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: var(--e-4);
-    border-bottom: 1px solid var(--linha);
-  }
-  .marca__logo { width: auto; justify-content: flex-start; }
-  .marca__logo img { width: 380px; }
-
-  .topo { grid-column: 1; grid-row: 2; justify-items: start; text-align: left; align-self: end; }
-  .topo__titulo { font-size: clamp(42px, 4vw, 56px); max-width: 12.5em; }
-  .topo__texto { max-width: 28em; }
-
-  .beneficios { grid-column: 1; grid-row: 3; align-self: start; }
-  .beneficios__titulo { text-align: left; font-size: 24px; }
-
-  /* cartões empilhados à direita (formato dos cartões: ver "Cartão compacto") */
-  .cartoes { grid-column: 2; grid-row: 2 / 4; align-self: center; gap: var(--e-3); }
-  .cartao { padding: var(--e-4); }
-
-}
-
-/* ---------- Rodapé (só no celular: no computador o logo do topo já traz as marcas) ---------- */
+/* ---------- 5. Rodapé: frase de apoio (e as marcas, no celular) ---------- */
 .rodape {
   position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  display: grid;
+  justify-items: center;
   gap: var(--e-4);
-  padding: var(--e-4) var(--gutter) max(var(--e-4), env(safe-area-inset-bottom));
+  padding: var(--e-5) var(--gutter) max(var(--e-5), env(safe-area-inset-bottom));
   border-top: 1px solid var(--linha);
+  text-align: center;
 }
-.rodape img { width: auto; height: 26px; opacity: 0.7; }
-@media (min-width: 640px) { .rodape { display: none; } }
+.rodape__texto {
+  max-width: 30em;
+  color: var(--texto-2);
+  font-size: clamp(14.5px, 3.8vw, 16.5px);
+  text-wrap: balance;
+}
+.rodape__logos { display: flex; justify-content: center; align-items: center; gap: var(--e-4); }
+.rodape__logos img { width: auto; height: 26px; opacity: 0.7; }
+/* no computador o logo do topo já traz as duas marcas */
+@media (min-width: 640px) { .rodape__logos { display: none; } }
 
 /* =========================================================
-   Entrada em sequência (--ordem): marca, título, apoio, cartões,
-   benefícios um a um. O título sai de um leve desfoque.
+   Computador: cartão com ícone vira faixa (ícone, texto e botão na
+   mesma linha) e a página fica mais curta. O cartão das páginas
+   "esperar" (sem ícone) continua centralizado.
+   ========================================================= */
+@media (min-width: 1024px) {
+  .cartoes:not(.cartoes--um) .cartao {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) 350px;
+    align-items: center;
+    column-gap: 20px;
+    padding: 20px var(--e-4);
+    text-align: left;
+  }
+  .cartoes:not(.cartoes--um) .cartao__texto { max-width: none; text-wrap: pretty; }
+  .cartoes:not(.cartoes--um) .acao { max-width: none; }
+  /* o texto do botão se mede pela faixa de 350 px, não pelo cartão inteiro */
+  .cartoes:not(.cartoes--um) .botao { font-size: 14px; }
+  .cartoes--um .cartao { padding: var(--e-5); }
+}
+
+/* =========================================================
+   Entrada em sequência (--ordem): marca, headline, cartões, lista
+   (item a item) e rodapé. A headline sai de um leve desfoque.
+   backwards: depois da entrada, o :hover volta a mexer no transform.
    ========================================================= */
 .marca,
 .topo__titulo,
-.topo__texto,
 .cartao,
 .alerta,
 .beneficios__titulo,
-.beneficios__lista li {
-  /* backwards: depois da entrada, o :hover volta a mexer no transform */
+.beneficios__lista li,
+.rodape__texto {
   animation: surge 0.9s var(--curva-saida) backwards;
   animation-delay: calc(var(--ordem, 0) * 90ms + 80ms);
 }
 .marca { --ordem: 0; }
 .topo__titulo { --ordem: 1; animation-name: surge-desfocado; }
-.topo__texto { --ordem: 2; }
-.cartao:nth-child(1) { --ordem: 3; }
-.cartao:nth-child(2) { --ordem: 4; }
-.alerta { --ordem: 5; }
-.beneficios__titulo { --ordem: 5; }
-.beneficios__lista li:nth-child(1) { --ordem: 6; }
-.beneficios__lista li:nth-child(2) { --ordem: 6.6; }
-.beneficios__lista li:nth-child(3) { --ordem: 7.2; }
-.beneficios__lista li:nth-child(4) { --ordem: 7.8; }
-.beneficios__lista li:nth-child(5) { --ordem: 8.4; }
-.beneficios__lista li:nth-child(6) { --ordem: 9; }
+.cartao:nth-child(1) { --ordem: 2; }
+.cartao:nth-child(2) { --ordem: 3; }
+.alerta { --ordem: 4; }
+.beneficios__titulo { --ordem: 4; }
+.beneficios__lista li:nth-child(1) { --ordem: 5; }
+.beneficios__lista li:nth-child(2) { --ordem: 5.6; }
+.beneficios__lista li:nth-child(3) { --ordem: 6.2; }
+.beneficios__lista li:nth-child(4) { --ordem: 6.8; }
+.beneficios__lista li:nth-child(5) { --ordem: 7.4; }
+.beneficios__lista li:nth-child(6) { --ordem: 8; }
+.rodape__texto { --ordem: 8; }
 @keyframes surge {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: none; }

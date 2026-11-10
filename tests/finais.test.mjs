@@ -139,6 +139,13 @@ test("cada página tem exatamente os links dos botões dela, todos válidos (htt
   assert.equal(LINKS_FINAIS["b/esperar"].grupo, "https://ec.cfaci.me/black-november-2026");
 });
 
+test("frase de apoio uma vez só, no rodapé (igual nas 4 páginas), e não nos blocos", () => {
+  const frase = /Essa é a oportunidade para você <strong>transformar<\/strong> sua carreira com as melhores condições que já fizemos\./g;
+  assert.equal((modelo.match(frase) || []).length, 1);
+  assert.match(modelo, /<footer class="rodape">\s*<p class="rodape__texto">Essa é a oportunidade/);
+  for (const [, html] of blocosDoModelo()) assert.doesNotMatch(html, /Essa é a oportunidade/);
+});
+
 test("o modelo não sai sozinho, só pelos 4 endereços", async () => {
   const env = { DB: d1(), ASSETS: { fetch: async () => new Response("arquivo") } };
   for (const c of ["/final", "/final/", "/final/index.html", "/final/index"]) {
