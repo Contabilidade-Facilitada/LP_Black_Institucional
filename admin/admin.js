@@ -339,6 +339,7 @@
     // para não entrarem nos números da LP
     finais: [],
     sessoesFinais: new Map(), // sessão -> page_view da página final
+    linksFinais: {}, // página -> { grupo, especialista } (cloudflare/finais.js)
     ultimo: { eventos: 0, cadastros: 0, finais: 0 },
     desvio: 0, // diferença entre o relógio do servidor e o deste computador
     primeiroTs: Infinity, // registro mais antigo (a ordem por id não garante isso)
@@ -3405,6 +3406,39 @@
     };
   }
 
+  // Links dos botões de cada página (cloudflare/finais.js, enviados pelo
+  // Worker em /admin/api/sync). Em texto, e não como link: abrir daqui
+  // contaria um clique no encurtador, e é por ele que o tráfego pago é
+  // otimizado. O botão "Copiar" põe o endereço na área de transferência.
+  const NOME_LINK = { especialista: "Especialista", grupo: "Grupo" };
+  const LINKS_ESPERADOS = (pagina) => (pagina.endsWith("antecipar") ? ["especialista", "grupo"] : ["grupo"]);
+  function linksDaPagina(pagina) {
+    const links = dados.linksFinais[pagina] || {};
+    return el("div", { class: "final-links" },
+      el("p", { class: "final-links__titulo" }, "Links dos botões"),
+      LINKS_ESPERADOS(pagina).map((tipo) => {
+        const endereco = links[tipo] || "";
+        return el("div", { class: "final-link" },
+          el("span", { class: "final-link__tipo" }, NOME_LINK[tipo]),
+          endereco
+            ? el("code", { class: "final-link__url", title: endereco }, endereco)
+            : el("span", { class: "final-link__vazio" }, "não configurado"),
+          endereco
+            ? el("button", { type: "button", class: "final-link__copiar", dataset: { copiar: endereco }, "aria-label": `Copiar o link ${NOME_LINK[tipo].toLowerCase()}` }, "Copiar")
+            : null);
+      }));
+  }
+  document.addEventListener("click", async (e) => {
+    const b = e.target instanceof Element ? e.target.closest("[data-copiar]") : null;
+    if (!b) return;
+    try {
+      await navigator.clipboard.writeText(b.dataset.copiar);
+      b.textContent = "Copiado";
+      b.classList.add("is-copiado");
+      setTimeout(() => { b.textContent = "Copiar"; b.classList.remove("is-copiado"); }, 1600);
+    } catch { /* sem permissão de área de transferência: o endereço continua à vista */ }
+  });
+
   function renderFinais(f, { animar, aoVivo }) {
     const total = resumoFinais(f.finais);
     contar("#fi-visitantes", total.visitantes, fmtNum, aoVivo);
@@ -3430,7 +3464,8 @@
           linha("Visitantes", fmtNum(r.visitantes), r.acessos !== r.visitantes ? `${fmtNum(r.acessos)} acessos` : null),
           linha("Clicaram no grupo", fmtNum(r.grupo)),
           p.chave.endsWith("antecipar") ? linha("Clicaram em especialista", fmtNum(r.especialista), Number.isFinite(r.taxaEspecialista) ? fmtPct(r.taxaEspecialista) : null) : null,
-          linha("Tempo mediano", Number.isFinite(r.tempoMediano) ? fmtDuracao(r.tempoMediano) : "—")));
+          linha("Tempo mediano", Number.isFinite(r.tempoMediano) ? fmtDuracao(r.tempoMediano) : "—")),
+        linksDaPagina(p.chave));
     }));
 
     // por origem do lead
@@ -3725,6 +3760,13 @@
     const finais = absorver(pacote.finais, "finais");
     dados.carregado = true;
     if (primeira) {
+      // links fictícios: a demonstração não fala com o Worker
+      dados.linksFinais = {
+        "a/antecipar": { especialista: "https://exemplo.com/especialista", grupo: "https://exemplo.com/grupo-antecipacao-a" },
+        "a/esperar": { grupo: "https://exemplo.com/grupo-a" },
+        "b/antecipar": { especialista: "https://exemplo.com/especialista", grupo: "https://exemplo.com/grupo-antecipacao-b" },
+        "b/esperar": { grupo: "" },
+      };
       document.body.classList.remove("is-iniciando");
       $("#aviso-demo").hidden = false;
       texto("#usuario", "modo demonstração");
@@ -3850,6 +3892,7 @@
         dados.desvio = corpo.agora - Date.now();
         if (corpo.email) texto("#usuario", corpo.email);
         if (corpo.copias) renderCopias(corpo.copias);
+        if (corpo.linksFinais) dados.linksFinais = corpo.linksFinais;
         const ev = absorver(corpo.eventos, "eventos");
         const cad = absorver(corpo.cadastros, "cadastros");
         // Worker anterior às páginas finais: sem "finais" na resposta

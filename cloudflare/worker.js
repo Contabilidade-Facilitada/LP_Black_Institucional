@@ -395,6 +395,13 @@ async function paginaFinal(env, url, final) {
 }
 
 // cliques nos botões e aberturas do QR Code de cada link (só no computador)
+// os links de cada página como o painel os mostra (aba Páginas finais): os
+// mesmos que paginaFinal() põe nos botões, já passados por linkSeguro()
+const LINKS_PAINEL = Object.fromEntries(Object.entries(LINKS_FINAIS).map(([pagina, links]) => [
+  pagina,
+  Object.fromEntries(Object.entries(links).map(([tipo, endereco]) => [tipo, linkSeguro(endereco)])),
+]));
+
 const EVENTOS_FINAIS = new Set(["page_view", "engajamento", ...TIPOS_LINK.flatMap((t) => [`clique_${t}`, `qr_${t}`])]);
 
 // Medição das páginas finais (final/final.js), na tabela finais_pf. As mesmas
@@ -797,7 +804,7 @@ async function painel(request, env, url, caminho) {
       pagina(env.DB, "finais_pf", COLUNAS_FINAIS, aposFinais)
         .catch(() => ({ colunas: COLUNAS_FINAIS, linhas: [], completo: true })),
     ]);
-    return protegido(json({ agora: Date.now(), email: env.ADMIN_EMAIL, eventos, cadastros, copias, finais }));
+    return protegido(json({ agora: Date.now(), email: env.ADMIN_EMAIL, eventos, cadastros, copias, finais, linksFinais: LINKS_PAINEL }));
   }
 
   if (caminho === "/admin/api/campanhas") return protegido(await campanhas(env, url));

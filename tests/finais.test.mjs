@@ -5,6 +5,7 @@
 // O preenchimento da página (HTMLRewriter) só existe no Cloudflare; aqui
 // ficam a coleta, a separação das tabelas e a leitura pelo painel.
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -224,4 +225,18 @@ test("sem a tabela finais_pf (schema.sql ainda não rodou), a coleta responde 50
   const DB = d1(antigo);
   assert.equal((await enviar({ DB }, { v: "v", s: "s", p: "a/esperar", eventos: [{ e: "page_view" }] })).status, 503);
   assert.equal(linhas(DB, "eventos_pf").length, 0);
+});
+
+test("painel: a sincronização traz os links dos botões de cada página, e só com sessão", async () => {
+  const env = { DB: d1(), ADMIN_EMAIL: "painel@example.com", ADMIN_SENHA: "senha-de-teste", ADMIN_CHAVE: "chave-de-teste" };
+  const validade = String(Math.floor(Date.now() / 1000) + 3600);
+  const assinatura = createHmac("sha256", env.ADMIN_CHAVE).update(`sessao|${validade}|${env.ADMIN_SENHA}`).digest("base64url");
+  const r = await pedir(env, `${ORIGEM}/admin/api/sync`, { headers: { Cookie: `cf_black_pf_painel=${validade}.${assinatura}` } });
+  assert.equal(r.status, 200);
+  const { linksFinais } = await r.json();
+  // os mesmos links que as páginas põem nos botões
+  for (const p of PAGINAS_FINAIS) {
+    for (const [tipo, endereco] of Object.entries(LINKS_FINAIS[p])) assert.equal(linksFinais[p][tipo], linkSeguro(endereco), `${p} ${tipo}`);
+  }
+  assert.equal((await pedir(env, `${ORIGEM}/admin/api/sync`)).status, 401);
 });
