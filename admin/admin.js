@@ -339,7 +339,7 @@
     // para não entrarem nos números da LP
     finais: [],
     sessoesFinais: new Map(), // sessão -> page_view da página final
-    linksFinais: {}, // página -> { grupo, especialista } (cloudflare/finais.js)
+    linksFinais: {}, // página -> { grupo } (cloudflare/finais.js)
     ultimo: { eventos: 0, cadastros: 0, finais: 0 },
     desvio: 0, // diferença entre o relógio do servidor e o deste computador
     primeiroTs: Infinity, // registro mais antigo (a ordem por id não garante isso)
@@ -3410,8 +3410,9 @@
   // Worker em /admin/api/sync). Em texto, e não como link: abrir daqui
   // contaria um clique no encurtador, e é por ele que o tráfego pago é
   // otimizado. O botão "Copiar" põe o endereço na área de transferência.
-  const NOME_LINK = { especialista: "Especialista", grupo: "Grupo" };
-  const LINKS_ESPERADOS = (pagina) => (pagina.endsWith("antecipar") ? ["especialista", "grupo"] : ["grupo"]);
+  // um botão por página desde 12/11/2026 (saiu o "Falar com especialista")
+  const NOME_LINK = { grupo: "Grupo" };
+  const LINKS_ESPERADOS = () => ["grupo"];
   function linksDaPagina(pagina) {
     const links = dados.linksFinais[pagina] || {};
     return el("div", { class: "final-links" },
@@ -3445,7 +3446,7 @@
     texto("#fi-visitantes-nota", `${plural(total.acessos, "acesso", "acessos")} nas 4 páginas finais`);
     contar("#fi-grupo", total.grupo, fmtNum, aoVivo);
     contar("#fi-taxa", total.taxa, (v) => fmtPct(v), aoVivo);
-    contar("#fi-especialista", total.especialista, fmtNum, aoVivo);
+    contar("#fi-tempo", total.tempoMediano, fmtDuracao, aoVivo);
 
     // um cartão por página, na ordem A/B × antecipar/esperar
     $("#finais-paginas").replaceChildren(...PAGINAS_FINAIS.map((p, i) => {
@@ -3463,7 +3464,6 @@
         el("dl", { class: "final-cartao__dados" },
           linha("Visitantes", fmtNum(r.visitantes), r.acessos !== r.visitantes ? `${fmtNum(r.acessos)} acessos` : null),
           linha("Clicaram no grupo", fmtNum(r.grupo)),
-          p.chave.endsWith("antecipar") ? linha("Clicaram em especialista", fmtNum(r.especialista), Number.isFinite(r.taxaEspecialista) ? fmtPct(r.taxaEspecialista) : null) : null,
           linha("Tempo mediano", Number.isFinite(r.tempoMediano) ? fmtDuracao(r.tempoMediano) : "—")),
         linksDaPagina(p.chave));
     }));
@@ -3486,9 +3486,8 @@
       el("td", { class: "forte" }, r.origem),
       el("td", { class: "num" }, fmtNum(r.visitantes)),
       el("td", { class: "num" }, fmtNum(r.grupo)),
-      el("td", { class: "num" }, fmtPct(r.taxa)),
-      el("td", { class: "num" }, fmtNum(r.especialista))))
-      : [el("tr", {}, el("td", { class: "vazio", colspan: 5 }, "Nenhum acesso às páginas finais no período."))]));
+      el("td", { class: "num" }, fmtPct(r.taxa))))
+      : [el("tr", {}, el("td", { class: "vazio", colspan: 4 }, "Nenhum acesso às páginas finais no período."))]));
 
     // acessos recentes: cada page_view com o que aconteceu na mesma sessão
     const porSessao = new Map();
@@ -3713,7 +3712,6 @@
         lead_origin: Math.random() < 0.9 ? leadOrigin : "", pontuacao, dispositivo, navegador, sistema, estado, cidade, pais });
       const chance = pagina.endsWith("antecipar") ? 0.62 : 0.48;
       if (Math.random() < chance) finais.push({ ts: Math.min(ts + 8000, relogio()), evento: "clique_grupo", ...base });
-      if (pagina.endsWith("antecipar") && Math.random() < 0.35) finais.push({ ts: Math.min(ts + 5000, relogio()), evento: "clique_especialista", ...base });
       finais.push({ ts: Math.min(ts + 15000, relogio()), evento: "engajamento", ...base, valor: Math.round(4 + Math.random() * 60) });
     }
     function visitasEsquenta(n, desde, ate) {
@@ -3762,9 +3760,9 @@
     if (primeira) {
       // links fictícios: a demonstração não fala com o Worker
       dados.linksFinais = {
-        "a/antecipar": { especialista: "https://exemplo.com/especialista", grupo: "https://exemplo.com/grupo-antecipacao-a" },
+        "a/antecipar": { grupo: "https://exemplo.com/grupo-antecipacao-a" },
         "a/esperar": { grupo: "https://exemplo.com/grupo-a" },
-        "b/antecipar": { especialista: "https://exemplo.com/especialista", grupo: "https://exemplo.com/grupo-antecipacao-b" },
+        "b/antecipar": { grupo: "https://exemplo.com/grupo-antecipacao-b" },
         "b/esperar": { grupo: "" },
       };
       document.body.classList.remove("is-iniciando");

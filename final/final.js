@@ -6,7 +6,6 @@
    e o tempo com a página visível. Também empurra os cliques para o
    dataLayer, para as conversões do GTM:
      final_clique_grupo         botão do grupo de WhatsApp
-     final_clique_especialista  botão "Falar com especialista" (B·antecipar)
    Cada evento leva pagina_final, grupo_lead e intencao_lead (as mesmas
    variáveis empurradas no <head>, antes do GTM).
 
@@ -17,7 +16,7 @@
 
    No computador, cada botão tem ao lado um ícone de QR Code que abre o QR
    do seu link numa janela flutuante, para abrir pelo celular (pedido do
-   time de copy). Eventos: final_qr_grupo e final_qr_especialista.
+   time de copy). Evento: final_qr_grupo.
    ========================================================= */
 (() => {
   "use strict";

@@ -16,9 +16,9 @@
  * abaixo: a otimização do tráfego pago é feita pelo link do botão, então
  * cada página tem os seus.
  *
- * O foco é levar a pessoa ao grupo de WhatsApp. Nas páginas "antecipar" o
- * botão principal é "Falar com especialista" (comercial), e o grupo vem
- * depois.
+ * O foco é levar a pessoa ao grupo de WhatsApp: cada página tem um botão só,
+ * o do grupo. (O botão "Falar com especialista" das páginas "antecipar" saiu
+ * em 12/11/2026.)
  *
  * Trocar um link aqui e publicar (push) basta: nada mais no código depende
  * deles; o QR Code de cada botão (computador) segue o link. Link vazio deixa
@@ -28,14 +28,12 @@
 // links enviados em 05/11/2026
 export const LINKS_FINAIS = {
   "a/antecipar": {
-    especialista: "https://ec.cfaci.me/vendas",
     grupo: "https://sndflw.pro/i/black-november-2026-antecipacao",
   },
   "a/esperar": {
     grupo: "https://sndflw.pro/i/black-november-2026",
   },
   "b/antecipar": {
-    especialista: "https://ec.cfaci.me/vendas",
     grupo: "https://cfaci.me/black-november-2026-antecipacao",
   },
   "b/esperar": {
@@ -49,9 +47,10 @@ export const INTENCOES_FINAIS = ["antecipar", "esperar"];
 // "a/antecipar", "a/esperar", "b/antecipar", "b/esperar"
 export const PAGINAS_FINAIS = GRUPOS_FINAIS.flatMap((g) => INTENCOES_FINAIS.map((i) => `${g}/${i}`));
 
-// tipos de botão (data-link no modelo); os mesmos nomes viram os eventos
-// clique_grupo e clique_especialista
-export const TIPOS_LINK = ["grupo", "especialista"];
+// tipos de botão (data-link no modelo); o nome vira os eventos clique_grupo
+// e qr_grupo. Era também "especialista", até 12/11/2026: os cliques antigos
+// continuam no banco e no painel, mas a coleta não aceita novos
+export const TIPOS_LINK = ["grupo"];
 
 // /final/a/antecipar (com ou sem barra no fim) -> { grupo, intencao, pagina }
 export function lerPaginaFinal(caminho) {

@@ -82,17 +82,17 @@ function blocosDoModelo() {
     .map((m) => [m[1].split(/\s+/), m[0]]);
 }
 
-test("cada página tem exatamente um bloco de texto; nas \"antecipar\" o especialista vem antes do grupo", () => {
+test("cada página tem exatamente um bloco de texto, com um botão só: o do grupo", () => {
   const blocos = blocosDoModelo();
   for (const p of PAGINAS_FINAIS) {
     const dela = blocos.filter(([lista]) => lista.includes(p));
     assert.equal(dela.length, 1, p);
     const [, html] = dela[0];
-    assert.match(html, /data-link="grupo"/, `${p}: botão do grupo`);
-    const antecipar = p.endsWith("antecipar");
-    assert.equal(/data-link="especialista"/.test(html), antecipar, `${p}: especialista`);
-    if (antecipar) assert.ok(html.indexOf('data-link="especialista"') < html.indexOf('data-link="grupo"'), p);
+    // o botão "Falar com especialista" saiu em 12/11/2026
+    assert.deepEqual([...html.matchAll(/data-link="([a-z]+)"/g)].map((m) => m[1]), ["grupo"], p);
+    assert.match(html, /<a class="botao botao--whatsapp" data-link="grupo"/, `${p}: botão principal`);
   }
+  assert.doesNotMatch(modelo, /data-link="especialista"|Falar com especialista|i-especialista/);
   // cada botão com link tem ao lado o ícone do QR Code do mesmo link
   const acoes = [...modelo.matchAll(/<div class="acao">([\s\S]*?)<\/div>/g)].map((m) => m[1]);
   assert.equal(acoes.length, (modelo.match(/<a [^>]*data-link=/g) || []).length);
@@ -124,7 +124,7 @@ test("lista \"No grupo você receberá\": uma por página, com os itens do docum
 });
 
 test("cada página tem exatamente os links dos botões dela, todos válidos (https)", () => {
-  assert.deepEqual(TIPOS_LINK, ["grupo", "especialista"]);
+  assert.deepEqual(TIPOS_LINK, ["grupo"]);
   assert.deepEqual(Object.keys(LINKS_FINAIS).sort(), [...PAGINAS_FINAIS].sort());
   const blocos = blocosDoModelo();
   for (const p of PAGINAS_FINAIS) {
@@ -168,11 +168,11 @@ test("acesso e cliques vão para finais_pf, sem tocar nas tabelas da LP", async 
         dt: 0,
         ctx: { utm_source: "meta", utm_campaign: "bfn_black", lead_origin: "lp_black_november_2026_frios", pontuacao: "131", ref: "3rng23rvpr3.typeform.com" },
       },
-      { e: "clique_especialista", dt: 0 },
       { e: "qr_grupo", dt: 0 },
       { e: "clique_grupo", dt: 0 },
       { e: "engajamento", n: 42.4, dt: 0 },
-      // fora da lista: ignorado
+      // fora da lista: ignorado (o especialista saiu das páginas em 12/11/2026)
+      { e: "clique_especialista", dt: 0 },
       { e: "lead_esquenta_black", dt: 0 },
       { e: "clique_compra", dt: 0 },
     ],
@@ -180,7 +180,7 @@ test("acesso e cliques vão para finais_pf, sem tocar nas tabelas da LP", async 
   assert.equal(r.status, 204);
 
   const gravadas = linhas(env.DB, "finais_pf");
-  assert.deepEqual(gravadas.map((l) => l.evento), ["page_view", "clique_especialista", "qr_grupo", "clique_grupo", "engajamento"]);
+  assert.deepEqual(gravadas.map((l) => l.evento), ["page_view", "qr_grupo", "clique_grupo", "engajamento"]);
   assert.ok(gravadas.every((l) => l.pagina === "b/antecipar" && l.visitante === "vis-1" && l.sessao === "ses-1"));
   const pv = gravadas[0];
   assert.equal(pv.utm_source, "meta");
@@ -188,7 +188,7 @@ test("acesso e cliques vão para finais_pf, sem tocar nas tabelas da LP", async 
   assert.equal(pv.lead_origin, "lp_black_november_2026_frios");
   assert.equal(pv.pontuacao, 131);
   assert.equal(pv.dispositivo, "celular");
-  assert.equal(gravadas[4].valor, 42);
+  assert.equal(gravadas[3].valor, 42);
   // contexto só no page_view
   assert.equal(gravadas[1].utm_source, null);
 

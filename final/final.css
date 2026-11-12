@@ -7,11 +7,10 @@
    Uma coluna só, centralizada, na mesma ordem em todas as telas:
      1. marca (logo e selo)
      2. headline
-     3. cartões com os botões, um embaixo do outro
+     3. cartão com o botão do grupo (um por página; na B·antecipar, com o
+        alerta logo abaixo)
      4. "No grupo você receberá" (itens compactos)
      5. rodapé com a frase de apoio (a mesma nas 4 páginas)
-   No computador o cartão com ícone vira uma faixa (ícone, texto e botão
-   na mesma linha), para a página ficar mais curta.
 
    Os espaços saem da escala --e-*. As animações usam só transform e
    opacity (e um brilho no botão), e somem com "reduzir movimento".
@@ -48,12 +47,7 @@
   --largura: 640px;
 }
 @media (min-width: 640px) { :root { --gutter: 32px; } }
-/* computador: as páginas "antecipar" têm as faixas (ícone, texto e botão numa linha) e
-   pedem mais largura; as "esperar" têm um cartão centralizado e ficam mais estreitas */
-@media (min-width: 1024px) {
-  :root { --largura: 880px; }
-  [data-intencao="esperar"] { --largura: 640px; }
-}
+
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -594,26 +588,8 @@ p { margin: 0; }
 /* no computador o logo do topo já traz as duas marcas */
 @media (min-width: 640px) { .rodape__logos { display: none; } }
 
-/* =========================================================
-   Computador: cartão com ícone vira faixa (ícone, texto e botão na
-   mesma linha) e a página fica mais curta. O cartão das páginas
-   "esperar" (sem ícone) continua centralizado.
-   ========================================================= */
-@media (min-width: 1024px) {
-  .cartoes:not(.cartoes--um) .cartao {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) 350px;
-    align-items: center;
-    column-gap: 20px;
-    padding: 20px var(--e-4);
-    text-align: left;
-  }
-  .cartoes:not(.cartoes--um) .cartao__texto { max-width: none; text-wrap: pretty; }
-  .cartoes:not(.cartoes--um) .acao { max-width: none; }
-  /* o texto do botão se mede pela faixa de 350 px, não pelo cartão inteiro */
-  .cartoes:not(.cartoes--um) .botao { font-size: 14px; }
-  .cartoes--um .cartao { padding: var(--e-5); }
-}
+/* computador: o cartão (um só por página) com mais respiro */
+@media (min-width: 1024px) { .cartao { padding: var(--e-5); } }
 
 /* =========================================================
    Entrada em sequência (--ordem): marca, headline, cartões, lista
