@@ -764,10 +764,10 @@
      --------------------------------------------------------- */
   // menorMelhor: na rejeição, no abandono e no carregamento, subir é ruim
   // (a seta continua apontando o sentido; só a cor se inverte)
-  function variacao(seletor, atual, anterior, modo = "relativo", menorMelhor = false) {
+  function variacao(seletor, atual, anterior, modo = "relativo", menorMelhor = false, { rotulo: rotuloDado = null, confianca = null } = {}) {
     const alvo = $(seletor);
     if (anterior === null) { alvo.replaceChildren(); return; }
-    const rotulo = ROTULOS_PERIODO_ANTERIOR[prefs.periodo] || "vs período anterior";
+    const rotulo = rotuloDado || ROTULOS_PERIODO_ANTERIOR[prefs.periodo] || "vs período anterior";
     let diferenca;
     let textoVar;
     if (modo === "pontos") {
@@ -781,10 +781,12 @@
     }
     if (Math.abs(diferenca) < 1e-9) { alvo.textContent = `sem variação ${rotulo}`; return; }
     const sobe = diferenca > 0;
-    alvo.replaceChildren(
+    const filhos = [
       el("span", { class: `seta ${sobe ? "seta--sobe" : "seta--desce"}${menorMelhor ? " seta--invertida" : ""}`, "aria-label": sobe ? "aumento de" : "queda de" }, sobe ? "▲ " : "▼ "),
       `${textoVar} ${rotulo}`,
-    );
+    ];
+    if (confianca) filhos.push(el("span", { class: `confianca confianca--${confianca.classe}` }, confianca.texto));
+    alvo.replaceChildren(...filhos);
   }
 
   function resumo(f) {
@@ -792,7 +794,7 @@
     return { visitantes, cadastros: f.cadastros.length, conversao: visitantes ? f.cadastros.length / visitantes : NaN, acessos: f.pvs.length };
   }
 
-  function renderGeral(f, anterior, { animar, aoVivo }) {
+  function renderGeral(f, comp, { animar, aoVivo }) {
     const r = resumo(f);
     contar("#k-cadastros", r.cadastros, fmtNum, aoVivo);
     contar("#k-acessos", r.acessos, fmtNum, aoVivo);
@@ -800,10 +802,13 @@
     texto("#k-cadastros-nota", plural(distintos(f.cadastros, "email").size, "e-mail único", "e-mails únicos"));
     texto("#k-acessos-nota", plural(distintos(f.pvs, "sessao").size, "visita (sessão)", "visitas (sessões)"));
 
-    const a = anterior ? resumo(anterior) : null;
-    variacao("#k-cadastros-delta", r.cadastros, a ? a.cadastros : null);
-    variacao("#k-acessos-delta", r.acessos, a ? a.acessos : null);
-    variacao("#k-visitantes-delta", r.visitantes, a ? a.visitantes : null);
+    // em toda a campanha os números são do período inteiro e a variação é das últimas 24 h
+    const ra = comp.atual === f ? r : resumo(comp.atual);
+    const a = resumo(comp.base);
+    const op = { rotulo: comp.rotulo };
+    variacao("#k-cadastros-delta", ra.cadastros, a.cadastros, "relativo", false, op);
+    variacao("#k-acessos-delta", ra.acessos, a.acessos, "relativo", false, op);
+    variacao("#k-visitantes-delta", ra.visitantes, a.visitantes, "relativo", false, op);
 
     // minigráficos dos indicadores, na mesma grade do período
     const grade = gradeTempo(f.inicio, f.fim, escalaDe(f.inicio, f.fim));
@@ -811,8 +816,9 @@
       faisca($(`#f-${metrica}`), { valores: valoresMetrica(metrica, f, grade), corSerie: METRICAS[metrica].cor(), animar });
     }
 
-    renderIndicadores(f, anterior, aoVivo);
-    renderEvolucao(f, anterior, grade, animar);
+    renderIndicadores(f, comp, aoVivo);
+    renderEvolucao(f, comp, grade, animar);
+    renderComparativosGeral(f, comp, animar);
     renderFunil(f, animar);
     renderBotoesGeral(f, animar);
     renderUltimos(f);
@@ -890,45 +896,49 @@
     ? `${(ms / 1000).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`
     : "—");
 
-  function renderIndicadores(f, anterior, aoVivo) {
+  function renderIndicadores(f, comp, aoVivo) {
     const r = indicadores(f);
-    const a = anterior ? indicadores(anterior) : null;
-    const ant = (k) => (a ? a[k] : null);
+    const ra = comp.atual === f ? r : indicadores(comp.atual);
+    const a = indicadores(comp.base);
+    const ant = (k) => a[k];
+    const op = { rotulo: comp.rotulo };
     const pct = (v) => fmtPct(v);
 
     contar("#k-conversao", r.conversao, pct, aoVivo);
-    variacao("#k-conversao-delta", r.conversao, ant("conversao"), "pontos");
+    variacao("#k-conversao-delta", ra.conversao, ant("conversao"), "pontos", false,
+      { ...op, confianca: confiancaProporcao(comp.atual.cadastros.length, ra.visitantes, comp.base.cadastros.length, a.visitantes) });
 
     contar("#k-ctr", r.ctr, pct, aoVivo);
-    variacao("#k-ctr-delta", r.ctr, ant("ctr"), "pontos");
+    variacao("#k-ctr-delta", ra.ctr, ant("ctr"), "pontos", false,
+      { ...op, confianca: confiancaProporcao(ra.clicaram, ra.visitantes, a.clicaram, a.visitantes) });
     texto("#k-ctr-nota", `${plural(r.clicaram, "visitante clicou", "visitantes clicaram")} num botão de cadastro`);
 
     contar("#k-rejeicao", r.rejeicao, pct, aoVivo);
-    variacao("#k-rejeicao-delta", r.rejeicao, ant("rejeicao"), "pontos", true);
+    variacao("#k-rejeicao-delta", ra.rejeicao, ant("rejeicao"), "pontos", true, op);
     texto("#k-rejeicao-nota", r.sessoes
       ? `${fmtNum(r.rejeitadas)} de ${plural(r.sessoes, "visita", "visitas")} com menos de 10 s e sem clicar em botão de cadastro`
       : "visitas com menos de 10 s e sem clicar em botão de cadastro");
 
     contar("#k-rolagem-geral", r.rolagem, (v) => fmtPct(v, 0), aoVivo);
-    variacao("#k-rolagem-geral-delta", r.rolagem, ant("rolagem"), "pontos");
+    variacao("#k-rolagem-geral-delta", ra.rolagem, ant("rolagem"), "pontos", false, op);
     texto("#k-rolagem-geral-nota", Number.isFinite(r.ateOFim)
       ? `média por visita · ${fmtPct(r.ateOFim, 0)} passaram de 75% da página`
       : "média da maior rolagem de cada visita");
 
     contar("#k-tempo-geral", r.tempo, fmtDuracao, aoVivo);
-    variacao("#k-tempo-geral-delta", r.tempo, ant("tempo"));
+    variacao("#k-tempo-geral-delta", ra.tempo, ant("tempo"), "relativo", false, op);
     texto("#k-tempo-geral-nota", Number.isFinite(r.tempoMedio)
       ? `mediana com a página à vista · média ${fmtDuracao(r.tempoMedio)}`
       : "mediana do tempo com a página à vista");
 
     contar("#k-abandono", r.abandono, pct, aoVivo);
-    variacao("#k-abandono-delta", r.abandono, ant("abandono"), "pontos", true);
+    variacao("#k-abandono-delta", ra.abandono, ant("abandono"), "pontos", true, op);
     texto("#k-abandono-nota", r.clicaram
       ? `não concluíram: ${fmtNum(r.abandonaram)} de ${fmtNum(r.clicaram)} que abriram o formulário`
       : "abriram o formulário e não se cadastraram");
 
     contar("#k-carregamento", r.carregamento, fmtSegundos, aoVivo);
-    variacao("#k-carregamento-delta", r.carregamento, a && a.cargas ? a.carregamento : null, "relativo", true);
+    variacao("#k-carregamento-delta", ra.carregamento, a.cargas ? a.carregamento : null, "relativo", true, op);
     texto("#k-carregamento-nota", r.cargas
       ? `mediana até a primeira tela aparecer · ${fmtPct(r.cargasBoas, 0)} em até 2,5 s`
       : "sem medição no período: começou na versão da LP de 03/11/2026");
@@ -973,7 +983,8 @@
     }));
   }
 
-  function renderEvolucao(f, anterior, grade, animar) {
+  function renderEvolucao(f, comp, grade, animar) {
+    const anterior = comp.mesmoRecorte ? comp.base : null;
     const metrica = METRICAS[prefs.metrica] ? prefs.metrica : "acessos";
     const def = METRICAS[metrica];
     $$("#metricas button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.metrica === metrica)));
@@ -984,7 +995,7 @@
 
     const series = [{ nome: def.nome, cor: def.cor(), valores: valoresMetrica(metrica, f, grade) }];
     if (anterior && prefs.comparar) {
-      series.push({ nome: `${def.nome} no período anterior`, cor: CORES.anterior, valores: valoresMetrica(metrica, anterior, grade, f.fim - f.inicio) });
+      series.push({ nome: `${def.nome} (${nomeDaBase(comp.j)})`, cor: CORES.anterior, valores: valoresMetrica(metrica, anterior, grade, comp.deslocamento) });
     }
     const porDia = grade.escala === DIA;
     texto("#evolucao-sub", `${def.nome} ${porDia ? "por dia · clique num dia para ver as horas" : "por hora"}`);
@@ -3531,11 +3542,177 @@
       && passaDims(e.evento === "page_view" ? e : dados.sessoesFinais.get(e.sessao)));
   }
 
-  function confiancaTaxa(a, b) {
-    if (a.visitantes < MINIMO_CONFIANCA || b.visitantes < MINIMO_CONFIANCA) return { classe: "pouco", texto: "pouco volume para concluir" };
-    return Math.abs(zDuas(a.grupo, a.visitantes, b.grupo, b.visitantes)) >= 1.96
+  // confiança da diferença entre duas proporções (x1 de n1 contra x2 de n2)
+  function confiancaProporcao(x1, n1, x2, n2) {
+    if (n1 < MINIMO_CONFIANCA || n2 < MINIMO_CONFIANCA) return { classe: "pouco", texto: "pouco volume para concluir" };
+    return Math.abs(zDuas(x1, n1, x2, n2)) >= 1.96
       ? { classe: "confiavel", texto: "diferença confiável" }
       : { classe: "acaso", texto: "pode ser acaso" };
+  }
+  const confiancaTaxa = (a, b) => confiancaProporcao(a.grupo, a.visitantes, b.grupo, b.visitantes);
+
+  // lista de destaques (frases): [{ tipo: sobe | desce | alerta | info, partes }]
+  function renderListaDestaques(seletor, itens) {
+    $(seletor).replaceChildren(...(itens.length
+      ? itens.map((i, n) => el("li", { class: `destaque destaque--${i.tipo}`, style: { "--i": String(n) } },
+        el("span", { class: "destaque__marca", "aria-hidden": "true" }, { sobe: "▲", desce: "▼", alerta: "!", info: "•" }[i.tipo]),
+        el("p", {}, ...i.partes)))
+      : [el("li", { class: "vazio" }, "Ainda sem dados suficientes para comparar.")]));
+  }
+
+  // "Cadastros cresceram 12% vs ontem até 16:12 (40 → 45)."
+  function fraseVariacao(itens, nome, a, b, rotulo) {
+    const v = variacaoDe(a, b);
+    if (!v) {
+      if (a && !b) itens.push({ tipo: "info", partes: [`${nome}: `, el("strong", {}, fmtNum(a)), `, sem base para comparar (${rotulo}).`] });
+      return;
+    }
+    if (Math.abs(v.d) < 1e-9) { itens.push({ tipo: "info", partes: [`${nome}: estável ${rotulo} (${fmtNum(a)}).`] }); return; }
+    itens.push({
+      tipo: v.sobe ? "sobe" : "desce",
+      partes: [`${nome} ${v.sobe ? "cresceram" : "caíram"} `, el("strong", {}, v.texto), ` ${rotulo} (${fmtNum(b)} → ${fmtNum(a)}).`],
+    });
+  }
+
+  // só acessos e cadastros de um intervalo (sem a lista de eventos, que é
+  // grande): para o ritmo de hoje, que roda a cada atualização
+  function fatiarLeve(inicio, fim) {
+    const dentro = (ts) => ts >= inicio && ts < fim;
+    return {
+      pvs: dados.pageviews.filter((p) => dentro(p.ts) && passaDims(p)),
+      cadastros: dados.cadastros.filter((c) => dentro(c.ts) && passaDims(c)),
+    };
+  }
+
+  // ritmo de hoje contra ontem no mesmo horário, com a projeção do dia
+  function fraseRitmo(itens, nome, contar) {
+    const agora = relogio();
+    const hoje = inicioDia(agora);
+    const nHoje = contar(hoje, agora + 1);
+    const nOntemAte = contar(hoje - DIA, agora - DIA + 1);
+    const nOntem = contar(hoje - DIA, hoje);
+    if (nOntemAte < 5) return;
+    const v = variacaoDe(nHoje, nOntemAte);
+    const projecao = Math.round(nHoje * (nOntem / nOntemAte));
+    if (prefs.periodo === "hoje") {
+      itens.push({ tipo: "info", partes: [`No ritmo de ontem, hoje fecha com cerca de `, el("strong", {}, `${fmtNum(projecao)} ${nome}`), ` (ontem: ${fmtNum(nOntem)}).`] });
+      return;
+    }
+    itens.push({
+      tipo: v && v.sobe ? "sobe" : v && v.d < 0 ? "desce" : "info",
+      partes: [`Hoje até ${fmtHoraMinuto.format(agora)}: `, el("strong", {}, `${fmtNum(nHoje)} ${nome}`),
+        v && Math.abs(v.d) >= 1e-9 ? `, ${v.texto} ${v.sobe ? "acima" : "abaixo"} de ontem no mesmo horário` : ", igual a ontem no mesmo horário",
+        ". No ritmo de ontem, o dia fecha com cerca de ", el("strong", {}, fmtNum(projecao)), ` (ontem: ${fmtNum(nOntem)}).`],
+    });
+  }
+
+  // contagem somada balde a balde (cadastros), com a base deslocada
+  function acumuladoContagem(grade, lista, deslocamento = 0) {
+    const v = contarPorBalde(grade, lista, deslocamento);
+    for (let i = 1; i < v.length; i++) v[i] += v[i - 1];
+    return v;
+  }
+
+  // comparação da Visão geral: o recorte atual (o período inteiro, ou as
+  // últimas 24 h em toda a campanha) e a base do mesmo tamanho
+  function comparacaoGeral(f) {
+    const j = janelasComparacao(f);
+    const recortado = prefs.periodo === "tudo";
+    return {
+      j,
+      rotulo: j.rotulo,
+      atual: recortado ? fatiar(...j.atual) : f,
+      base: fatiar(...j.base),
+      deslocamento: j.atual[0] - j.base[0],
+      // o gráfico de evolução só sobrepõe a base quando ela cobre o mesmo recorte do gráfico
+      mesmoRecorte: !recortado,
+    };
+  }
+
+  function renderComparativosGeral(f, comp, animar) {
+    const ra = resumo(comp.atual);
+    const a = resumo(comp.base);
+    const fmtJanela = ([ini, fim]) => `${fmtDataCurta.format(ini).replace(",", "")} a ${fmtDataCurta.format(Math.min(fim, relogio()) - 1).replace(",", "")}`;
+    $("#geral-comparacao-base").replaceChildren(
+      el("strong", {}, "Comparativos: "), `${fmtJanela(comp.j.atual)} contra ${fmtJanela(comp.j.base)}`,
+      prefs.periodo === "tudo" ? " (em toda a campanha, a comparação usa as últimas 24 h)" : "", ".");
+
+    const itens = [];
+    fraseVariacao(itens, "Cadastros", ra.cadastros, a.cadastros, comp.rotulo);
+    fraseVariacao(itens, "Visitantes", ra.visitantes, a.visitantes, comp.rotulo);
+    const vc = variacaoDe(ra.conversao, a.conversao, "pontos");
+    if (vc && Math.abs(vc.d) >= 1e-9) {
+      const c = confiancaProporcao(ra.cadastros, ra.visitantes, a.cadastros, a.visitantes);
+      itens.push({
+        tipo: c.classe === "confiavel" ? (vc.sobe ? "sobe" : "alerta") : "info",
+        partes: [`Conversão${comp.j.recorte ? " nas últimas 24 h" : ""}: `, el("strong", {}, fmtPct(ra.conversao)),
+          ` (${vc.sobe ? "+" : "−"}${vc.texto} ${comp.j.recorte ? contraDe(comp.j) : comp.rotulo}); ${c.texto}.`],
+      });
+    }
+    fraseRitmo(itens, "cadastros", (ini, fim) => fatiarLeve(ini, fim).cadastros.length);
+
+    // origem (utm_source) com a melhor conversão no período, com volume mínimo
+    const porOrigem = new Map();
+    for (const p of f.pvs) {
+      const o = p.utm_source || "(sem UTM)";
+      if (!porOrigem.has(o)) porOrigem.set(o, { visitantes: new Set(), cadastros: 0 });
+      if (p.visitante) porOrigem.get(o).visitantes.add(p.visitante);
+    }
+    for (const c of f.cadastros) {
+      const o = c.utm_source || "(sem UTM)";
+      if (!porOrigem.has(o)) porOrigem.set(o, { visitantes: new Set(), cadastros: 0 });
+      porOrigem.get(o).cadastros++;
+    }
+    const origens = [...porOrigem].map(([nome, o]) => ({ nome, visitantes: o.visitantes.size, cadastros: o.cadastros, taxa: razao(o.cadastros, o.visitantes.size) }))
+      .filter((o) => o.visitantes >= 30 && Number.isFinite(o.taxa));
+    if (origens.length >= 2) {
+      origens.sort((x, y) => y.taxa - x.taxa);
+      const melhor = origens[0];
+      const resto = origens.slice(1).reduce((s, o) => ({ cadastros: s.cadastros + o.cadastros, visitantes: s.visitantes + o.visitantes }), { cadastros: 0, visitantes: 0 });
+      const c = confiancaProporcao(melhor.cadastros, melhor.visitantes, resto.cadastros, resto.visitantes);
+      itens.push({
+        tipo: "info",
+        partes: ["Melhor conversão por origem: ", el("strong", {}, `${melhor.nome} (${fmtPct(melhor.taxa)})`),
+          `, ${fmtNum(melhor.cadastros)} cadastros de ${fmtNum(melhor.visitantes)} visitantes; contra as outras origens, ${c.texto}.`],
+      });
+    }
+
+    // origem que mais cresceu em cadastros no recorte
+    const contarPorOrigem = (lista) => {
+      const m = new Map();
+      for (const c of lista) m.set(c.utm_source || "(sem UTM)", (m.get(c.utm_source || "(sem UTM)") || 0) + 1);
+      return m;
+    };
+    const cadAt = contarPorOrigem(comp.atual.cadastros);
+    const cadBa = contarPorOrigem(comp.base.cadastros);
+    const cresceu = [...cadAt].map(([nome, n]) => ({ nome, n, b: cadBa.get(nome) || 0 }))
+      .filter((o) => o.b >= 5).map((o) => ({ ...o, v: variacaoDe(o.n, o.b) }))
+      .filter((o) => o.v && o.v.d > 0).sort((x, y) => y.v.d - x.v.d)[0];
+    if (cresceu) {
+      itens.push({ tipo: "sobe", partes: ["Origem que mais cresceu: ", el("strong", {}, cresceu.nome), `, +${cresceu.v.texto} em cadastros ${comp.rotulo} (${fmtNum(cresceu.b)} → ${fmtNum(cresceu.n)}).`] });
+    }
+
+    // horário com mais cadastros no período, quando ele se destaca
+    if (f.cadastros.length >= 30) {
+      const porHora = new Array(24).fill(0);
+      for (const c of f.cadastros) porHora[partes(c.ts).hora]++;
+      const pico = porHora.indexOf(Math.max(...porHora));
+      if (porHora[pico] / f.cadastros.length >= 1.5 / 24) {
+        itens.push({ tipo: "info", partes: ["Horário com mais cadastros: ", el("strong", {}, `${pico}h–${(pico + 1) % 24}h`), ` (${fmtPct(porHora[pico] / f.cadastros.length, 0)} dos cadastros do período).`] });
+      }
+    }
+    renderListaDestaques("#geral-destaques", itens);
+
+    // crescimento acumulado dos cadastros, com a base por cima
+    const grade = gradeTempo(comp.j.atual[0], comp.j.atual[1], escalaDe(comp.j.atual[0], comp.j.atual[1]));
+    const series = [
+      { nome: "Cadastros", cor: CORES.cadastros, valores: acumuladoContagem(grade, comp.atual.cadastros) },
+      { nome: `Cadastros na base (${nomeDaBase(comp.j)})`, cor: CORES.anterior, valores: acumuladoContagem(grade, comp.base.cadastros, comp.deslocamento) },
+    ];
+    texto("#geral-crescimento-sub", `${comp.j.recorte ? `${comp.j.recorte}: ` : ""}cadastros somados ${grade.escala === DIA ? "dia a dia" : "hora a hora"}; a linha cinza é a base (${nomeDaBase(comp.j)})`);
+    grafico($("#g-geral-crescimento"), { pontos: grade.pontos, series, tipo: "area", formato: fmtNum, inteiro: true, animar });
+    $("#legenda-geral-crescimento").replaceChildren(...series.map((s) => el("span", { class: "legenda__item" },
+      el("span", { class: "legenda__linha", style: { background: s.cor } }), s.nome)));
   }
 
   // variação entre atual e base: { sobe, texto } ou null (sem base)
@@ -3579,20 +3756,8 @@
   // frases dos destaques: [{ tipo: sobe | desce | alerta | info, partes }]
   function destaquesFinais(f, at, ba, rotulo, resumosAt, resumosBa, resumosPeriodo, recorte, contra) {
     const itens = [];
-    const variacaoFrase = (nome, a, b) => {
-      const v = variacaoDe(a, b);
-      if (!v) {
-        if (a && !b) itens.push({ tipo: "info", partes: [`${nome}: `, el("strong", {}, fmtNum(a)), `, sem base para comparar (${rotulo}).`] });
-        return;
-      }
-      if (Math.abs(v.d) < 1e-9) { itens.push({ tipo: "info", partes: [`${nome}: estável ${rotulo} (${fmtNum(a)}).`] }); return; }
-      itens.push({
-        tipo: v.sobe ? "sobe" : "desce",
-        partes: [`${nome} ${v.sobe ? "cresceram" : "caíram"} `, el("strong", {}, v.texto), ` ${rotulo} (${fmtNum(b)} → ${fmtNum(a)}).`],
-      });
-    };
-    variacaoFrase("Visitantes", at.visitantes, ba.visitantes);
-    variacaoFrase("Cliques no grupo", at.grupo, ba.grupo);
+    fraseVariacao(itens, "Visitantes", at.visitantes, ba.visitantes, rotulo);
+    fraseVariacao(itens, "Cliques no grupo", at.grupo, ba.grupo, rotulo);
 
     // taxa geral, com a confiança da diferença
     const vt = variacaoDe(at.taxa, ba.taxa, "pontos");
@@ -3605,25 +3770,7 @@
       });
     }
 
-    // ritmo de hoje contra ontem no mesmo horário, com a projeção do dia
-    const agora = relogio();
-    const hoje = inicioDia(agora);
-    const vHoje = resumoFinais(fatiarFinais(hoje, agora + 1)).visitantes;
-    const vOntemAte = resumoFinais(fatiarFinais(hoje - DIA, agora - DIA + 1)).visitantes;
-    const vOntem = resumoFinais(fatiarFinais(hoje - DIA, hoje)).visitantes;
-    if (vOntemAte >= 5) {
-      const v = variacaoDe(vHoje, vOntemAte);
-      const projecao = Math.round(vHoje * (vOntem / vOntemAte));
-      // no período "Hoje" a comparação com ontem já está nas frases acima: fica só a projeção
-      if (prefs.periodo === "hoje") {
-        itens.push({ tipo: "info", partes: ["No ritmo de ontem, hoje fecha com cerca de ", el("strong", {}, plural(projecao, "visitante", "visitantes")), ` (ontem: ${fmtNum(vOntem)}).`] });
-      } else itens.push({
-        tipo: v && v.sobe ? "sobe" : v && v.d < 0 ? "desce" : "info",
-        partes: [`Hoje até ${fmtHoraMinuto.format(agora)}: `, el("strong", {}, plural(vHoje, "visitante", "visitantes")),
-          v && Math.abs(v.d) >= 1e-9 ? `, ${v.texto} ${v.sobe ? "acima" : "abaixo"} de ontem no mesmo horário` : ", igual a ontem no mesmo horário",
-          ". No ritmo de ontem, o dia fecha com cerca de ", el("strong", {}, fmtNum(projecao)), ` (ontem: ${fmtNum(vOntem)}).`],
-      });
-    }
+    fraseRitmo(itens, "visitantes", (inicio, fim) => resumoFinais(fatiarFinais(inicio, fim)).visitantes);
 
     // maior e menor taxa entre as páginas, no período escolhido
     const comVolume = PAGINAS_FINAIS.map((p) => ({ p, r: resumosPeriodo.get(p.chave) })).filter(({ r }) => r.visitantes >= 1 && Number.isFinite(r.taxa));
@@ -3698,11 +3845,7 @@
     // destaques
     const resumosPeriodo = new Map(PAGINAS_FINAIS.map((p) => [p.chave, resumoFinais(f.finais.filter((e) => e.pagina === p.chave))]));
     const itens = destaquesFinais(f, at, ba, j.rotulo, resumosAt, resumosBa, resumosPeriodo, j.recorte, contraDe(j));
-    $("#finais-destaques").replaceChildren(...(itens.length
-      ? itens.map((i, n) => el("li", { class: `destaque destaque--${i.tipo}`, style: { "--i": String(n) } },
-        el("span", { class: "destaque__marca", "aria-hidden": "true" }, { sobe: "▲", desce: "▼", alerta: "!", info: "•" }[i.tipo]),
-        el("p", {}, ...i.partes)))
-      : [el("li", { class: "vazio" }, "Ainda sem acessos suficientes para comparar.")]));
+    renderListaDestaques("#finais-destaques", itens);
 
     // crescimento acumulado: o recorte atual com a base por cima
     const grade = gradeTempo(j.atual[0], j.atual[1], escalaDe(j.atual[0], j.atual[1]));
@@ -3923,8 +4066,8 @@
 
     const opcoes = { animar, aoVivo };
     if (prefs.aba === "geral") {
-      const anterior = prefs.periodo === "tudo" ? null : fatiar(inicio - (fim - inicio), inicio);
-      renderGeral(f, anterior, opcoes);
+      // base de comparação justa (hoje = ontem até a mesma hora...), ver janelasComparacao()
+      renderGeral(f, comparacaoGeral(f), opcoes);
     } else if (prefs.aba === "cadastros") renderCadastros(f, opcoes);
     else if (prefs.aba === "campanhas") renderCampanhas(f, opcoes);
     else if (prefs.aba === "origens") renderOrigens(f, opcoes);

@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20261112-3">
-  <script src="admin.js?v=20261112-4" defer></script>
+  <link rel="stylesheet" href="admin.css?v=20261112-4">
+  <script src="admin.js?v=20261112-5" defer></script>
 </head>
 <body class="is-iniciando">
   <div class="brilho" aria-hidden="true"></div>
@@ -114,6 +114,28 @@
           <p class="kpi__valor" id="k-agora">0</p>
           <p class="kpi__delta" id="k-agora-nota">ativos nos últimos 2 minutos</p>
           <div class="kpi__ondas" aria-hidden="true"><span></span><span></span><span></span></div>
+        </article>
+      </div>
+
+      <!-- comparativos: a mesma base justa da aba Páginas finais (hoje = ontem
+           até a mesma hora; toda a campanha = últimas 24 h × 24 h anteriores),
+           ver comparacaoGeral() e renderComparativosGeral() em admin.js -->
+      <p class="comparacao-base" id="geral-comparacao-base"></p>
+      <div class="grade grade--2">
+        <article class="cartao">
+          <header class="cartao__topo">
+            <h2>Destaques</h2>
+            <p>o que mudou, escrito a partir dos números (atualiza sozinho)</p>
+          </header>
+          <ul class="destaques destaques--uma-coluna" id="geral-destaques"></ul>
+        </article>
+        <article class="cartao">
+          <header class="cartao__topo">
+            <h2>Crescimento acumulado</h2>
+            <p id="geral-crescimento-sub">cadastros somados ao longo do período, com a base de comparação</p>
+          </header>
+          <div class="grafico grafico--alto" id="g-geral-crescimento"></div>
+          <div class="legenda" id="legenda-geral-crescimento"></div>
         </article>
       </div>
 
