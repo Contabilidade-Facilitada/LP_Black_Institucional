@@ -240,3 +240,12 @@ test("painel: a sincronização traz os links dos botões de cada página, e só
   }
   assert.equal((await pedir(env, `${ORIGEM}/admin/api/sync`)).status, 401);
 });
+
+test("modo de visualização (?teste=1, o \"Abrir página\" do painel): sem GTM e sem medição", () => {
+  // o GTM só carrega fora do modo de visualização
+  assert.match(modelo, /if\(!\/\[\?&\]teste=1\(&\|\$\)\/\.test\(location\.search\)\)\(function\(w,d,s,l,i\)/);
+  const script = readFileSync(new URL("final/final.js", raiz), "utf8");
+  // registrar() não grava nada nesse modo, e o clique nos botões é barrado antes da medição
+  assert.match(script, /function registrar\(evento, extra = \{\}\) \{\s*if \(modoTeste\) return;/);
+  assert.match(script, /e\.stopImmediatePropagation\(\);/);
+});

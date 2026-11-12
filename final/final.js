@@ -29,6 +29,31 @@
   // aberto fora do Worker (arquivo solto): não mede nada
   if (!/^[ab]\/(antecipar|esperar)$/.test(pagina)) return;
 
+  /* ---------------- Modo de visualização (?teste=1) ----------------
+     É o "Abrir página" do painel. Nada é medido (registrar não grava), o
+     GTM não carrega (ver index.html) e os botões mostram o destino em vez
+     de abrir: abrir contaria clique no encurtador, e é por ele que o
+     tráfego pago é otimizado. O QR Code continua abrindo normalmente. */
+  const modoTeste = new URLSearchParams(location.search).get("teste") === "1";
+  if (modoTeste) {
+    const aviso = document.createElement("div");
+    aviso.className = "aviso-teste";
+    aviso.setAttribute("role", "status");
+    aviso.textContent = "Visualização do painel: este acesso não é medido e os botões não abrem o link.";
+    document.body.append(aviso);
+    // na captura: roda antes da medição dos cliques e a interrompe
+    document.addEventListener("click", (e) => {
+      const link = e.target instanceof Element ? e.target.closest("[data-link]") : null;
+      if (!link) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      aviso.textContent = link.href ? `Este botão leva para ${link.href}` : "Este botão ainda não tem link configurado.";
+      aviso.classList.remove("is-destaque");
+      void aviso.offsetWidth;
+      aviso.classList.add("is-destaque");
+    }, true);
+  }
+
   /* ---------------- QR Code de cada link (só computador) ----------------
      Ao lado de cada botão há um ícone de QR; o clique abre a janela
      flutuante (#qr-janela) com o QR Code do link daquele botão. Sem link
@@ -185,6 +210,7 @@
   }
 
   function registrar(evento, extra = {}) {
+    if (modoTeste) return;
     fila.push({ e: evento, ...extra, t: Date.now() });
     if (!espera) espera = setTimeout(enviar, 1500);
   }

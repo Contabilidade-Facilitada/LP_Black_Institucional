@@ -261,7 +261,7 @@
     const padrao = {
       aba: "geral", periodo: "tudo", de: "", ate: "", filtros: {},
       dimensao: "utm_source", evento: "", metrica: "acessos", granularidade: "auto",
-      comparar: false, calor: "acessos", ranking: "utm_source", porPagina: 50, pulsos: false, mapa: "calor", pessoas: "gravadas", pessoasOrdem: "recentes",
+      comparar: false, calor: "acessos", ranking: "utm_source", porPagina: 50, pulsos: false, mapa: "calor", pessoas: "gravadas", pessoasOrdem: "recentes", finaisMetrica: "volume",
       ordem: {
         cadastros: { campo: "ts", dir: "desc" },
         origens: { campo: "visitantes", dir: "desc" },
@@ -3390,6 +3390,7 @@
     const quem = (evento) => distintos(lista.filter((e) => e.evento === evento), "visitante");
     const grupo = quem("clique_grupo");
     const especialista = quem("clique_especialista");
+    const qr = quem("qr_grupo");
     // tempo por sessão: o maior envio de engajamento de cada uma
     const tempos = new Map();
     for (const e of lista) {
@@ -3400,6 +3401,7 @@
       visitantes: visitantes.size,
       grupo: grupo.size,
       especialista: especialista.size,
+      qr: qr.size,
       taxa: visitantes.size ? grupo.size / visitantes.size : NaN,
       taxaEspecialista: visitantes.size ? especialista.size / visitantes.size : NaN,
       tempoMediano: tempos.size ? mediana([...tempos.values()]) : NaN,
@@ -3440,6 +3442,49 @@
     } catch { /* sem permissão de área de transferência: o endereço continua à vista */ }
   });
 
+  // anel da taxa de entrada no grupo: arco proporcional e o número no meio
+  // (o arco "enche" na entrada, ver .anel-taxa em admin.css; o .medidor é
+  // outro componente, o da aba Gravações)
+  function anelTaxa(taxa, animar) {
+    const raio = 30;
+    const circunferencia = 2 * Math.PI * raio;
+    const fracao = Number.isFinite(taxa) ? Math.max(0, Math.min(1, taxa)) : 0;
+    const svg = svgEl("svg", { viewBox: "0 0 76 76", class: "anel-taxa__arco", "aria-hidden": "true" });
+    const arco = svgEl("circle", {
+      cx: 38, cy: 38, r: raio, class: "anel-taxa__valor", stroke: CORES.verde,
+      "stroke-dasharray": circunferencia.toFixed(2), "stroke-dashoffset": (circunferencia * (1 - fracao)).toFixed(2),
+    });
+    arco.style.setProperty("--circunferencia", circunferencia.toFixed(2));
+    svg.append(svgEl("circle", { cx: 38, cy: 38, r: raio, class: "anel-taxa__trilho" }), arco);
+    return el("div", {
+      class: `anel-taxa${animar && !movimentoReduzido ? " anima" : ""}`,
+      role: "img",
+      "aria-label": `${fmtPct(taxa)} dos visitantes entraram no grupo`,
+    }, svg, el("span", { class: "anel-taxa__numero" }, Number.isFinite(taxa) ? fmtPct(taxa, 0) : "—"));
+  }
+
+  // séries do gráfico de uma página: visitantes e quem clicou no grupo
+  // (pessoas distintas por hora ou dia), ou a taxa entre os dois
+  function seriesDaPagina(lista, grade) {
+    const visitantes = distintosPorBalde(grade, lista.filter((e) => e.evento === "page_view"), "visitante");
+    const grupo = distintosPorBalde(grade, lista.filter((e) => e.evento === "clique_grupo"), "visitante");
+    if (prefs.finaisMetrica === "taxa") {
+      return {
+        series: [{ nome: "Taxa de entrada no grupo", cor: CORES.verde, valores: visitantes.map((v, i) => (v ? Math.min(1, grupo[i] / v) : 0)) }],
+        formato: (v) => fmtPct(v),
+        inteiro: false,
+      };
+    }
+    return {
+      series: [
+        { nome: "Visitantes", cor: CORES.visitantes, valores: visitantes },
+        { nome: "Clicaram no grupo", cor: CORES.verde, valores: grupo },
+      ],
+      formato: fmtNum,
+      inteiro: true,
+    };
+  }
+
   function renderFinais(f, { animar, aoVivo }) {
     const total = resumoFinais(f.finais);
     contar("#fi-visitantes", total.visitantes, fmtNum, aoVivo);
@@ -3447,26 +3492,75 @@
     contar("#fi-grupo", total.grupo, fmtNum, aoVivo);
     contar("#fi-taxa", total.taxa, (v) => fmtPct(v), aoVivo);
     contar("#fi-tempo", total.tempoMediano, fmtDuracao, aoVivo);
+    if (!["volume", "taxa"].includes(prefs.finaisMetrica)) prefs.finaisMetrica = "volume";
+    $$("#finais-metricas button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.finaisMetrica === prefs.finaisMetrica)));
+    $$("#finais-granularidades button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.granularidade === prefs.granularidade)));
+
+    const porPagina = new Map(PAGINAS_FINAIS.map((p) => [p.chave, f.finais.filter((e) => e.pagina === p.chave)]));
+    const resumos = new Map([...porPagina].map(([chave, lista]) => [chave, resumoFinais(lista)]));
+
+    // as porcentagens lado a lado (barras na escala de 0 a 100%)
+    const vazioFinais = "Nenhum acesso às páginas finais no período.";
+    listaBarras($("#finais-taxas"), PAGINAS_FINAIS.map((p) => {
+      const r = resumos.get(p.chave);
+      return { nome: p.nome, valor: Number.isFinite(r.taxa) ? r.taxa : 0, rotulo: fmtPct(r.taxa), nota: `${fmtNum(r.grupo)} de ${fmtNum(r.visitantes)}`, cor: CORES.verde };
+    }), { animar, vazio: vazioFinais });
+    listaBarras($("#finais-distribuicao"), PAGINAS_FINAIS.map((p) => {
+      const r = resumos.get(p.chave);
+      const parte = total.visitantes ? r.visitantes / total.visitantes : 0;
+      return { nome: p.nome, valor: parte, rotulo: fmtPct(parte), nota: plural(r.visitantes, "visitante", "visitantes"), cor: CORES.visitantes };
+    }), { animar, vazio: vazioFinais });
+
+    // eixo do tempo dos gráficos: do primeiro acesso às páginas finais (não do
+    // começo da LP, semanas antes) até o fim do período
+    let primeiroFinal = Infinity;
+    for (const e of dados.finais) if (e.ts < primeiroFinal) primeiroFinal = e.ts;
+    const inicioGrafico = Number.isFinite(primeiroFinal) ? Math.max(f.inicio, inicioDia(primeiroFinal)) : f.inicio;
+    const grade = gradeTempo(inicioGrafico, f.fim, escalaDe(inicioGrafico, f.fim));
+
+    // os gráficos antigos saem do observador de tamanho antes de o cartão ser refeito
+    $$("#finais-paginas .grafico").forEach((g) => { configuracoes.delete(g); observadorTamanho.unobserve(g); });
 
     // um cartão por página, na ordem A/B × antecipar/esperar
+    const graficos = [];
     $("#finais-paginas").replaceChildren(...PAGINAS_FINAIS.map((p, i) => {
-      const r = resumoFinais(f.finais.filter((e) => e.pagina === p.chave));
+      const r = resumos.get(p.chave);
+      const parte = total.visitantes ? r.visitantes / total.visitantes : NaN;
       const linha = (rotulo, valor, extra) => el("div", { class: "final-cartao__linha" },
         el("dt", {}, rotulo), el("dd", {}, valor, extra ? el("small", {}, extra) : null));
+      const alvoGrafico = el("div", { class: "grafico grafico--final" });
+      const { series, formato, inteiro } = seriesDaPagina(porPagina.get(p.chave), grade);
+      graficos.push([alvoGrafico, series, formato, inteiro]);
       return el("article", { class: `cartao final-cartao${animar && !movimentoReduzido ? " is-surgindo" : ""}`, style: { "--i": String(i) } },
         el("header", { class: "final-cartao__topo" },
-          el("h3", {}, p.nome),
-          el("code", { class: "final-cartao__endereco" }, `/final/${p.chave}`)),
-        el("p", { class: "final-cartao__nota" }, p.nota),
-        el("p", { class: "final-cartao__taxa" }, fmtPct(r.taxa), el("span", {}, "entraram no grupo")),
-        el("div", { class: "final-cartao__barra", "aria-hidden": "true" },
-          el("span", { style: { width: `${Number.isFinite(r.taxa) ? Math.round(r.taxa * 100) : 0}%` } })),
+          el("div", {},
+            el("h3", {}, p.nome),
+            el("p", { class: "final-cartao__nota" }, p.nota, " · ", el("code", { class: "final-cartao__endereco" }, `/final/${p.chave}`))),
+          // modo de visualização (?teste=1): não mede o acesso, não carrega o
+          // GTM e os botões mostram o destino em vez de abrir (ver final.js)
+          el("a", {
+            class: "final-cartao__abrir", href: `/final/${p.chave}?teste=1`, target: "_blank", rel: "noopener",
+            title: "Abre em modo de visualização: o acesso não é medido e os botões não abrem o link",
+          }, "Abrir página", el("span", { "aria-hidden": "true" }, " ↗"))),
+        el("div", { class: "final-cartao__resumo" },
+          anelTaxa(r.taxa, animar),
+          el("div", { class: "final-cartao__frases" },
+            el("p", {}, el("strong", {}, fmtNum(r.grupo)), ` de ${plural(r.visitantes, "visitante entrou", "visitantes entraram")} no grupo`),
+            el("p", {}, el("strong", {}, fmtPct(parte)), " dos visitantes do período vieram para esta página"),
+            el("p", {}, "Tempo mediano: ", el("strong", {}, Number.isFinite(r.tempoMediano) ? fmtDuracao(r.tempoMediano) : "—")))),
+        alvoGrafico,
+        el("div", { class: "legenda" }, series.map((s) => el("span", { class: "legenda__item" },
+          el("span", { class: "legenda__linha", style: { background: s.cor } }), s.nome))),
         el("dl", { class: "final-cartao__dados" },
           linha("Visitantes", fmtNum(r.visitantes), r.acessos !== r.visitantes ? `${fmtNum(r.acessos)} acessos` : null),
-          linha("Clicaram no grupo", fmtNum(r.grupo)),
-          linha("Tempo mediano", Number.isFinite(r.tempoMediano) ? fmtDuracao(r.tempoMediano) : "—")),
+          linha("Clicaram no grupo", fmtNum(r.grupo), Number.isFinite(r.taxa) ? fmtPct(r.taxa) : null),
+          linha("Abriram o QR Code", fmtNum(r.qr), "só no computador")),
         linksDaPagina(p.chave));
     }));
+    // desenhados depois de entrarem na página: o gráfico se mede pela largura do cartão
+    for (const [alvo, series, formato, inteiro] of graficos) {
+      grafico(alvo, { pontos: grade.pontos, series, tipo: "area", formato, inteiro, animar });
+    }
 
     // por origem do lead
     const porOrigem = new Map();
@@ -3712,6 +3806,8 @@
         lead_origin: Math.random() < 0.9 ? leadOrigin : "", pontuacao, dispositivo, navegador, sistema, estado, cidade, pais });
       const chance = pagina.endsWith("antecipar") ? 0.62 : 0.48;
       if (Math.random() < chance) finais.push({ ts: Math.min(ts + 8000, relogio()), evento: "clique_grupo", ...base });
+      // QR Code só existe no computador
+      if (dispositivo === "computador" && Math.random() < 0.3) finais.push({ ts: Math.min(ts + 6000, relogio()), evento: "qr_grupo", ...base });
       finais.push({ ts: Math.min(ts + 15000, relogio()), evento: "engajamento", ...base, valor: Math.round(4 + Math.random() * 60) });
     }
     function visitasEsquenta(n, desde, ate) {
@@ -3994,6 +4090,8 @@
     ["#calor-metricas", "calor"],
     ["#mapa-modos", "mapa"],
     ["#pessoas-filtros", "pessoas"],
+    ["#finais-metricas", "finaisMetrica"],
+    ["#finais-granularidades", "granularidade"],
   ];
   for (const [seletor, campo] of escolhas) {
     $(seletor).addEventListener("click", (e) => {

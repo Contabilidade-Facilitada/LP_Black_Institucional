@@ -567,6 +567,29 @@ p { margin: 0; }
   .beneficios__lista li:last-child:nth-child(odd) { grid-column: auto; }
 }
 
+/* ---------- Modo de visualização (?teste=1, o "Abrir página" do painel) ---------- */
+.aviso-teste {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 10;
+  max-width: calc(100vw - 32px);
+  padding: 10px 18px;
+  border: 1px solid var(--linha-laranja);
+  border-radius: 999px;
+  background: rgba(13, 10, 8, 0.92);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: var(--texto);
+  font-size: 13px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  transform: translateX(-50%);
+  box-shadow: 0 16px 40px -16px rgba(0, 0, 0, 0.8);
+}
+.aviso-teste.is-destaque { animation: aviso-pulo 0.5s var(--curva-mola); border-color: var(--laranja); }
+@keyframes aviso-pulo { 40% { transform: translateX(-50%) scale(1.04); } }
+
 /* ---------- 5. Rodapé: frase de apoio (e as marcas, no celular) ---------- */
 .rodape {
   position: relative;

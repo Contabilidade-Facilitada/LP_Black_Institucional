@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20261111-1">
-  <script src="admin.js?v=20261112-1" defer></script>
+  <link rel="stylesheet" href="admin.css?v=20261112-2">
+  <script src="admin.js?v=20261112-3" defer></script>
 </head>
 <body class="is-iniciando">
   <div class="brilho" aria-hidden="true"></div>
@@ -764,9 +764,41 @@
         </article>
       </div>
 
-      <header class="secao">
-        <h2>Por página</h2>
-        <p>A: 0 a 78 pontos no Typeform · B: 79 a 200 pontos</p>
+      <!-- as porcentagens lado a lado: quem entrou no grupo em cada página e
+           como o Typeform distribuiu os visitantes entre as 4 -->
+      <div class="grade grade--2">
+        <article class="cartao">
+          <header class="cartao__topo">
+            <h2>Taxa de entrada no grupo por página</h2>
+            <p>visitantes que clicaram no grupo ÷ visitantes da página</p>
+          </header>
+          <div id="finais-taxas"></div>
+        </article>
+        <article class="cartao">
+          <header class="cartao__topo">
+            <h2>Para qual página o Typeform mandou</h2>
+            <p>parte dos visitantes do período em cada página</p>
+          </header>
+          <div id="finais-distribuicao"></div>
+        </article>
+      </div>
+
+      <header class="secao secao--controles">
+        <div>
+          <h2>Por página</h2>
+          <p>A: 0 a 78 pontos no Typeform · B: 79 a 200 pontos · passe o mouse no gráfico para ver cada hora ou dia</p>
+        </div>
+        <div class="controles">
+          <div class="segmentos" id="finais-metricas" role="group" aria-label="O que o gráfico mostra">
+            <button type="button" data-finais-metrica="volume" aria-pressed="true">Visitantes e cliques</button>
+            <button type="button" data-finais-metrica="taxa" aria-pressed="false">Taxa de entrada</button>
+          </div>
+          <div class="segmentos" id="finais-granularidades" role="group" aria-label="Agrupar por">
+            <button type="button" data-granularidade="auto" aria-pressed="true">Automático</button>
+            <button type="button" data-granularidade="hora" aria-pressed="false">Por hora</button>
+            <button type="button" data-granularidade="dia" aria-pressed="false">Por dia</button>
+          </div>
+        </div>
       </header>
       <div class="finais-grade" id="finais-paginas"></div>
 
