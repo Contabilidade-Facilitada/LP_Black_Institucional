@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Squada+One&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="admin.css?v=20261112-2">
-  <script src="admin.js?v=20261112-3" defer></script>
+  <link rel="stylesheet" href="admin.css?v=20261112-3">
+  <script src="admin.js?v=20261112-4" defer></script>
 </head>
 <body class="is-iniciando">
   <div class="brilho" aria-hidden="true"></div>
@@ -745,24 +745,48 @@
         <article class="kpi kpi--destaque">
           <h2 class="kpi__rotulo">Visitantes</h2>
           <p class="kpi__valor" id="fi-visitantes">0</p>
+          <p class="kpi__delta" id="fi-visitantes-delta"></p>
           <p class="kpi__nota" id="fi-visitantes-nota">nas 4 páginas finais</p>
         </article>
         <article class="kpi">
           <h2 class="kpi__rotulo">Clicaram no grupo</h2>
           <p class="kpi__valor" id="fi-grupo">0</p>
+          <p class="kpi__delta" id="fi-grupo-delta"></p>
           <p class="kpi__nota">visitantes que tocaram no botão do WhatsApp</p>
         </article>
         <article class="kpi">
           <h2 class="kpi__rotulo">Taxa de entrada no grupo</h2>
           <p class="kpi__valor" id="fi-taxa">0%</p>
+          <p class="kpi__delta" id="fi-taxa-delta"></p>
           <p class="kpi__nota">clicaram no grupo ÷ visitantes</p>
         </article>
         <article class="kpi">
           <h2 class="kpi__rotulo">Tempo mediano na página</h2>
           <p class="kpi__valor" id="fi-tempo">—</p>
+          <p class="kpi__delta" id="fi-tempo-delta"></p>
           <p class="kpi__nota">metade dos visitantes ficou menos que isso</p>
         </article>
       </div>
+
+      <!-- comparativos: a base é escolhida pelo período (hoje = ontem até a
+           mesma hora; toda a campanha = últimas 24 h × 24 h anteriores...),
+           ver janelasComparacao() em admin.js -->
+      <p class="comparacao-base" id="finais-comparacao-base"></p>
+      <article class="cartao">
+        <header class="cartao__topo">
+          <h2>Destaques</h2>
+          <p>o que mudou, escrito a partir dos números (atualiza sozinho)</p>
+        </header>
+        <ul class="destaques" id="finais-destaques"></ul>
+      </article>
+      <article class="cartao">
+        <header class="cartao__topo">
+          <h2>Crescimento acumulado</h2>
+          <p id="finais-crescimento-sub">visitantes e cliques no grupo somados ao longo do período, com a base de comparação</p>
+        </header>
+        <div class="grafico grafico--alto" id="g-finais-crescimento"></div>
+        <div class="legenda" id="legenda-finais-crescimento"></div>
+      </article>
 
       <!-- as porcentagens lado a lado: quem entrou no grupo em cada página e
            como o Typeform distribuiu os visitantes entre as 4 -->

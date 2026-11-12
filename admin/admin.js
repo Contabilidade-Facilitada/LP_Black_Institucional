@@ -3485,6 +3485,259 @@
     };
   }
 
+  /* ---------------------------------------------------------
+     Comparativos das páginas finais
+
+     A base sai do período escolhido, sempre do mesmo tamanho e, com o dia
+     em andamento, no mesmo trecho do dia:
+       hoje            -> ontem até a mesma hora
+       ontem           -> anteontem
+       24h, 7d, 30d    -> as 24 h, 7 ou 30 dias anteriores
+       personalizado   -> o período anterior, de mesmo tamanho
+       toda a campanha -> últimas 24 h × 24 h anteriores (não há "antes")
+     Diferença de taxa: teste de duas proporções (zDuas, o mesmo da aba
+     Campanhas); |z| ≥ 1,96 é diferença confiável (95%). Com menos de 20
+     visitantes em algum lado, o painel diz que ainda é pouco volume.
+     --------------------------------------------------------- */
+  const fmtHoraMinuto = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO, hour: "2-digit", minute: "2-digit" });
+  const MINIMO_CONFIANCA = 20;
+
+  // "vs 24 h anteriores", sem o recorte (para frases que já dizem qual é)
+  const contraDe = (j) => j.rotulo.replace(/^nas últimas 24 h /, "");
+  // "24 h anteriores", "ontem até 16:12"... (o nome da base, sem o "vs")
+  const nomeDaBase = (j) => contraDe(j).replace(/^vs /, "");
+
+  function janelasComparacao(f) {
+    const agora = relogio();
+    const hoje = inicioDia(agora);
+    switch (prefs.periodo) {
+      case "hoje":
+        return { atual: [hoje, agora + 1], base: [hoje - DIA, agora - DIA + 1], rotulo: `vs ontem até ${fmtHoraMinuto.format(agora)}` };
+      case "ontem":
+        return { atual: [hoje - DIA, hoje], base: [hoje - 2 * DIA, hoje - DIA], rotulo: "vs anteontem" };
+      case "tudo":
+        return { atual: [agora - DIA, agora + 1], base: [agora - 2 * DIA, agora - DIA + 1], rotulo: "nas últimas 24 h vs 24 h anteriores", recorte: "Últimas 24 h" };
+      default: {
+        const tamanho = f.fim - f.inicio;
+        const rotulos = { "24h": "vs 24 h anteriores", "7d": "vs 7 dias anteriores", "30d": "vs 30 dias anteriores" };
+        return { atual: [f.inicio, f.fim], base: [f.inicio - tamanho, f.inicio], rotulo: rotulos[prefs.periodo] || "vs período anterior, de mesmo tamanho" };
+      }
+    }
+  }
+
+  // linhas de finais_pf de um intervalo, com os mesmos filtros do painel
+  function fatiarFinais(inicio, fim) {
+    return dados.finais.filter((e) => e.ts >= inicio && e.ts < fim
+      && passaDims(e.evento === "page_view" ? e : dados.sessoesFinais.get(e.sessao)));
+  }
+
+  function confiancaTaxa(a, b) {
+    if (a.visitantes < MINIMO_CONFIANCA || b.visitantes < MINIMO_CONFIANCA) return { classe: "pouco", texto: "pouco volume para concluir" };
+    return Math.abs(zDuas(a.grupo, a.visitantes, b.grupo, b.visitantes)) >= 1.96
+      ? { classe: "confiavel", texto: "diferença confiável" }
+      : { classe: "acaso", texto: "pode ser acaso" };
+  }
+
+  // variação entre atual e base: { sobe, texto } ou null (sem base)
+  function variacaoDe(atual, base, modo = "relativo") {
+    if (!Number.isFinite(atual) || !Number.isFinite(base)) return null;
+    if (modo === "pontos") {
+      const d = atual - base;
+      return { d, sobe: d > 0, texto: `${Math.abs(d * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} p.p.` };
+    }
+    if (!base) return null;
+    const d = (atual - base) / base;
+    return { d, sobe: d > 0, texto: fmtPct(Math.abs(d), 0) };
+  }
+  const seta = (v) => el("span", { class: `seta ${v.sobe ? "seta--sobe" : "seta--desce"}`, "aria-label": v.sobe ? "aumento de" : "queda de" }, v.sobe ? "▲ " : "▼ ");
+
+  function deltaFinal(seletor, atual, base, rotulo, { modo = "relativo", confianca = null } = {}) {
+    const alvo = $(seletor);
+    const v = variacaoDe(atual, base, modo);
+    if (!v) { alvo.textContent = atual ? `sem base ${rotulo}` : `sem dados ${rotulo}`; return; }
+    if (Math.abs(v.d) < 1e-9) { alvo.textContent = `sem variação ${rotulo}`; return; }
+    const filhos = [seta(v), `${v.texto} ${rotulo}`];
+    if (confianca) filhos.push(el("span", { class: `confianca confianca--${confianca.classe}` }, confianca.texto));
+    alvo.replaceChildren(...filhos);
+  }
+
+  // pessoas novas no recorte (primeira vez que aparecem) e quem clicou no
+  // grupo, somadas balde a balde; "deslocamento" põe a base sobre a grade atual
+  function acumulado(grade, lista, evento, deslocamento = 0) {
+    const v = new Array(grade.n).fill(0);
+    const vistos = new Set();
+    for (const e of [...lista].sort((a, b) => a.ts - b.ts)) {
+      if (e.evento !== evento || !e.visitante || vistos.has(e.visitante)) continue;
+      vistos.add(e.visitante);
+      const i = Math.floor((e.ts + deslocamento - grade.primeiro) / grade.escala);
+      if (i >= 0 && i < grade.n) v[i]++;
+    }
+    for (let i = 1; i < v.length; i++) v[i] += v[i - 1];
+    return v;
+  }
+
+  // frases dos destaques: [{ tipo: sobe | desce | alerta | info, partes }]
+  function destaquesFinais(f, at, ba, rotulo, resumosAt, resumosBa, resumosPeriodo, recorte, contra) {
+    const itens = [];
+    const variacaoFrase = (nome, a, b) => {
+      const v = variacaoDe(a, b);
+      if (!v) {
+        if (a && !b) itens.push({ tipo: "info", partes: [`${nome}: `, el("strong", {}, fmtNum(a)), `, sem base para comparar (${rotulo}).`] });
+        return;
+      }
+      if (Math.abs(v.d) < 1e-9) { itens.push({ tipo: "info", partes: [`${nome}: estável ${rotulo} (${fmtNum(a)}).`] }); return; }
+      itens.push({
+        tipo: v.sobe ? "sobe" : "desce",
+        partes: [`${nome} ${v.sobe ? "cresceram" : "caíram"} `, el("strong", {}, v.texto), ` ${rotulo} (${fmtNum(b)} → ${fmtNum(a)}).`],
+      });
+    };
+    variacaoFrase("Visitantes", at.visitantes, ba.visitantes);
+    variacaoFrase("Cliques no grupo", at.grupo, ba.grupo);
+
+    // taxa geral, com a confiança da diferença
+    const vt = variacaoDe(at.taxa, ba.taxa, "pontos");
+    if (vt && Math.abs(vt.d) >= 1e-9) {
+      const c = confiancaTaxa(at, ba);
+      itens.push({
+        tipo: c.classe === "confiavel" ? (vt.sobe ? "sobe" : "alerta") : "info",
+        partes: [`Taxa de entrada no grupo${recorte ? ` ${recorte.toLowerCase().replace(/^últimas/, "nas últimas")}` : ""}: `, el("strong", {}, fmtPct(at.taxa)),
+          ` (${vt.sobe ? "+" : "−"}${vt.texto} ${recorte ? contra : rotulo}); ${c.texto}.`],
+      });
+    }
+
+    // ritmo de hoje contra ontem no mesmo horário, com a projeção do dia
+    const agora = relogio();
+    const hoje = inicioDia(agora);
+    const vHoje = resumoFinais(fatiarFinais(hoje, agora + 1)).visitantes;
+    const vOntemAte = resumoFinais(fatiarFinais(hoje - DIA, agora - DIA + 1)).visitantes;
+    const vOntem = resumoFinais(fatiarFinais(hoje - DIA, hoje)).visitantes;
+    if (vOntemAte >= 5) {
+      const v = variacaoDe(vHoje, vOntemAte);
+      const projecao = Math.round(vHoje * (vOntem / vOntemAte));
+      // no período "Hoje" a comparação com ontem já está nas frases acima: fica só a projeção
+      if (prefs.periodo === "hoje") {
+        itens.push({ tipo: "info", partes: ["No ritmo de ontem, hoje fecha com cerca de ", el("strong", {}, plural(projecao, "visitante", "visitantes")), ` (ontem: ${fmtNum(vOntem)}).`] });
+      } else itens.push({
+        tipo: v && v.sobe ? "sobe" : v && v.d < 0 ? "desce" : "info",
+        partes: [`Hoje até ${fmtHoraMinuto.format(agora)}: `, el("strong", {}, plural(vHoje, "visitante", "visitantes")),
+          v && Math.abs(v.d) >= 1e-9 ? `, ${v.texto} ${v.sobe ? "acima" : "abaixo"} de ontem no mesmo horário` : ", igual a ontem no mesmo horário",
+          ". No ritmo de ontem, o dia fecha com cerca de ", el("strong", {}, fmtNum(projecao)), ` (ontem: ${fmtNum(vOntem)}).`],
+      });
+    }
+
+    // maior e menor taxa entre as páginas, no período escolhido
+    const comVolume = PAGINAS_FINAIS.map((p) => ({ p, r: resumosPeriodo.get(p.chave) })).filter(({ r }) => r.visitantes >= 1 && Number.isFinite(r.taxa));
+    if (comVolume.length >= 2) {
+      comVolume.sort((a, b) => b.r.taxa - a.r.taxa);
+      const melhor = comVolume[0];
+      const pior = comVolume[comVolume.length - 1];
+      if (melhor.r.taxa > pior.r.taxa) {
+        const c = confiancaTaxa(melhor.r, pior.r);
+        const precisa = c.classe === "confiavel" ? "" : (() => {
+          const n = amostraNecessaria(melhor.r.taxa, pior.r.taxa);
+          return Number.isFinite(n) ? ` Para confirmar, cerca de ${fmtNum(n)} visitantes em cada uma.` : "";
+        })();
+        itens.push({
+          tipo: "info",
+          partes: ["Maior taxa: ", el("strong", {}, `${melhor.p.nome} (${fmtPct(melhor.r.taxa, 0)})`), "; menor: ",
+            el("strong", {}, `${pior.p.nome} (${fmtPct(pior.r.taxa, 0)})`), `. ${capitalizar(c.texto)}.${precisa}`],
+        });
+      }
+    }
+
+    // página que mais cresceu em visitantes, e quedas confiáveis de taxa
+    const cresc = PAGINAS_FINAIS.map((p) => {
+      const a = resumosAt.get(p.chave);
+      const b = resumosBa.get(p.chave);
+      return { p, a, b, v: b.visitantes >= 5 ? variacaoDe(a.visitantes, b.visitantes) : null };
+    });
+    const maior = cresc.filter((c) => c.v && c.v.d > 0).sort((x, y) => y.v.d - x.v.d)[0];
+    if (maior) {
+      itens.push({ tipo: "sobe", partes: ["Maior crescimento: ", el("strong", {}, maior.p.nome), `, +${maior.v.texto} em visitantes ${rotulo} (${fmtNum(maior.b.visitantes)} → ${fmtNum(maior.a.visitantes)}).`] });
+    }
+    for (const c of cresc) {
+      const v = variacaoDe(c.a.taxa, c.b.taxa, "pontos");
+      if (v && v.d < 0 && confiancaTaxa(c.a, c.b).classe === "confiavel") {
+        itens.push({ tipo: "alerta", partes: [el("strong", {}, c.p.nome), `: a taxa de entrada caiu ${v.texto} ${rotulo} (diferença confiável).`] });
+      }
+    }
+
+    // horário com mais visitantes no período escolhido
+    const pvs = f.finais.filter((e) => e.evento === "page_view");
+    if (pvs.length >= 30) {
+      const porHora = new Array(24).fill(0);
+      for (const e of pvs) porHora[partes(e.ts).hora]++;
+      const pico = porHora.indexOf(Math.max(...porHora));
+      // só quando o pico se destaca: pelo menos 1,5 vez a média de uma hora
+      if (porHora[pico] / pvs.length >= 1.5 / 24) itens.push({ tipo: "info", partes: ["Horário de pico: ", el("strong", {}, `${pico}h–${(pico + 1) % 24}h`), ` (${fmtPct(porHora[pico] / pvs.length, 0)} dos acessos do período).`] });
+    }
+    return itens;
+  }
+
+  function renderComparativosFinais(f, animar) {
+    const j = janelasComparacao(f);
+    const linhasAt = fatiarFinais(...j.atual);
+    const linhasBa = fatiarFinais(...j.base);
+    const at = resumoFinais(linhasAt);
+    const ba = resumoFinais(linhasBa);
+    const porPagina = (linhas) => new Map(PAGINAS_FINAIS.map((p) => [p.chave, resumoFinais(linhas.filter((e) => e.pagina === p.chave))]));
+    const resumosAt = porPagina(linhasAt);
+    const resumosBa = porPagina(linhasBa);
+
+    const fmtJanela = ([ini, fim]) => `${fmtDataCurta.format(ini).replace(",", "")} a ${fmtDataCurta.format(Math.min(fim, relogio()) - 1).replace(",", "")}`;
+    $("#finais-comparacao-base").replaceChildren(
+      el("strong", {}, "Comparativos: "), `${fmtJanela(j.atual)} contra ${fmtJanela(j.base)}`,
+      prefs.periodo === "tudo" ? " (em toda a campanha, a comparação usa as últimas 24 h)" : "",
+      ". Troque o período acima para comparar outro recorte.");
+
+    deltaFinal("#fi-visitantes-delta", at.visitantes, ba.visitantes, j.rotulo);
+    deltaFinal("#fi-grupo-delta", at.grupo, ba.grupo, j.rotulo);
+    deltaFinal("#fi-taxa-delta", at.taxa, ba.taxa, j.rotulo, { modo: "pontos", confianca: confiancaTaxa(at, ba) });
+    deltaFinal("#fi-tempo-delta", at.tempoMediano, ba.tempoMediano, j.rotulo);
+
+    // destaques
+    const resumosPeriodo = new Map(PAGINAS_FINAIS.map((p) => [p.chave, resumoFinais(f.finais.filter((e) => e.pagina === p.chave))]));
+    const itens = destaquesFinais(f, at, ba, j.rotulo, resumosAt, resumosBa, resumosPeriodo, j.recorte, contraDe(j));
+    $("#finais-destaques").replaceChildren(...(itens.length
+      ? itens.map((i, n) => el("li", { class: `destaque destaque--${i.tipo}`, style: { "--i": String(n) } },
+        el("span", { class: "destaque__marca", "aria-hidden": "true" }, { sobe: "▲", desce: "▼", alerta: "!", info: "•" }[i.tipo]),
+        el("p", {}, ...i.partes)))
+      : [el("li", { class: "vazio" }, "Ainda sem acessos suficientes para comparar.")]));
+
+    // crescimento acumulado: o recorte atual com a base por cima
+    const grade = gradeTempo(j.atual[0], j.atual[1], escalaDe(j.atual[0], j.atual[1]));
+    const deslocamento = j.atual[0] - j.base[0];
+    const series = [
+      { nome: "Visitantes", cor: CORES.visitantes, valores: acumulado(grade, linhasAt, "page_view") },
+      { nome: `Visitantes na base (${nomeDaBase(j)})`, cor: CORES.anterior, valores: acumulado(grade, linhasBa, "page_view", deslocamento) },
+      { nome: "Clicaram no grupo", cor: CORES.verde, valores: acumulado(grade, linhasAt, "clique_grupo") },
+    ];
+    texto("#finais-crescimento-sub", `${j.recorte ? `${j.recorte}: ` : ""}somados ${grade.escala === DIA ? "dia a dia" : "hora a hora"}; a linha cinza é a base (${nomeDaBase(j)})`);
+    grafico($("#g-finais-crescimento"), { pontos: grade.pontos, series, tipo: "area", formato: fmtNum, inteiro: true, animar });
+    $("#legenda-finais-crescimento").replaceChildren(...series.map((s) => el("span", { class: "legenda__item" },
+      el("span", { class: "legenda__linha", style: { background: s.cor } }), s.nome)));
+
+    return { j, resumosAt, resumosBa };
+  }
+
+  // comparativo de uma página, para o cartão dela
+  function comparativoDaPagina(chave, comp) {
+    const a = comp.resumosAt.get(chave);
+    const b = comp.resumosBa.get(chave);
+    const vv = variacaoDe(a.visitantes, b.visitantes);
+    const vt = variacaoDe(a.taxa, b.taxa, "pontos");
+    const item = (nome, v) => el("span", { class: "comparativo__item" }, `${nome} `,
+      v && Math.abs(v.d) >= 1e-9 ? [seta(v), v.texto] : el("span", { class: "comparativo__sem" }, v ? "estável" : "sem base"));
+    return el("p", { class: "final-cartao__comparativo" },
+      el("span", { class: "comparativo__rotulo" }, (() => {
+        const contra = contraDe(comp.j).replace(/^vs /, "contra ");
+        return comp.j.recorte ? `${comp.j.recorte} ${contra}:` : `${capitalizar(contra)}:`;
+      })()),
+      item("Visitantes", vv),
+      item("Taxa", vt),
+      vt && Math.abs(vt.d) >= 1e-9 ? el("span", { class: `confianca confianca--${confiancaTaxa(a, b).classe}` }, confiancaTaxa(a, b).texto) : null);
+  }
+
   function renderFinais(f, { animar, aoVivo }) {
     const total = resumoFinais(f.finais);
     contar("#fi-visitantes", total.visitantes, fmtNum, aoVivo);
@@ -3492,6 +3745,7 @@
     contar("#fi-grupo", total.grupo, fmtNum, aoVivo);
     contar("#fi-taxa", total.taxa, (v) => fmtPct(v), aoVivo);
     contar("#fi-tempo", total.tempoMediano, fmtDuracao, aoVivo);
+    const comp = renderComparativosFinais(f, animar);
     if (!["volume", "taxa"].includes(prefs.finaisMetrica)) prefs.finaisMetrica = "volume";
     $$("#finais-metricas button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.finaisMetrica === prefs.finaisMetrica)));
     $$("#finais-granularidades button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.granularidade === prefs.granularidade)));
@@ -3548,6 +3802,7 @@
             el("p", {}, el("strong", {}, fmtNum(r.grupo)), ` de ${plural(r.visitantes, "visitante entrou", "visitantes entraram")} no grupo`),
             el("p", {}, el("strong", {}, fmtPct(parte)), " dos visitantes do período vieram para esta página"),
             el("p", {}, "Tempo mediano: ", el("strong", {}, Number.isFinite(r.tempoMediano) ? fmtDuracao(r.tempoMediano) : "—")))),
+        comparativoDaPagina(p.chave, comp),
         alvoGrafico,
         el("div", { class: "legenda" }, series.map((s) => el("span", { class: "legenda__item" },
           el("span", { class: "legenda__linha", style: { background: s.cor } }), s.nome))),

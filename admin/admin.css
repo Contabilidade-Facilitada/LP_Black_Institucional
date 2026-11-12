@@ -2133,3 +2133,77 @@ body.entrar {
 }
 .grafico--final { min-height: 220px; margin-top: 4px; }
 .final-cartao .legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--texto-2); font-size: 12px; }
+
+/* ---------- Páginas finais: comparativos ---------- */
+.comparacao-base { margin: -4px 0 0; color: var(--apagado); font-size: 12.5px; }
+.comparacao-base strong { color: var(--texto-2); font-weight: 600; }
+
+/* etiqueta de confiança da diferença de taxa (teste de duas proporções) */
+.confianca {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.confianca--confiavel { background: rgba(76, 201, 106, 0.14); color: var(--sucesso); }
+.confianca--acaso { background: rgba(255, 255, 255, 0.07); color: var(--texto-2); }
+.confianca--pouco { background: rgba(255, 255, 255, 0.05); color: var(--apagado); }
+
+/* destaques: uma frase por linha, com a marca da direção */
+.destaques { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.destaque {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 13.5px;
+  line-height: 1.45;
+  animation: surgir 0.5s var(--curva) both;
+  animation-delay: calc(var(--i, 0) * 50ms);
+}
+.destaque p { margin: 0; color: var(--texto-2); }
+.destaque strong { color: var(--texto); font-variant-numeric: tabular-nums; }
+.destaque__marca {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--texto-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+.destaque--sobe .destaque__marca { background: rgba(76, 201, 106, 0.14); color: var(--sucesso); }
+.destaque--desce .destaque__marca { background: rgba(255, 138, 122, 0.14); color: var(--erro); }
+.destaque--alerta { border-color: rgba(255, 138, 122, 0.35); }
+.destaque--alerta .destaque__marca { background: var(--erro); color: #1a0705; }
+
+/* comparativo dentro do cartão de cada página */
+.final-cartao__comparativo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 2px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--texto-2);
+  font-size: 12.5px;
+}
+.comparativo__rotulo { color: var(--apagado); }
+.comparativo__item { font-weight: 600; font-variant-numeric: tabular-nums; }
+.comparativo__sem { color: var(--apagado); font-weight: 400; }
+.final-cartao__comparativo .seta--sobe { color: var(--sucesso); }
+.final-cartao__comparativo .seta--desce { color: var(--erro); }
+.destaque .seta, .kpi__delta .confianca { font-weight: 600; }
+@media (min-width: 1000px) { .destaques { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
